@@ -19,6 +19,10 @@ backend/build/
 !**/.env.example
 !**/.env.template
 
+# Entornos virtuales Python
+**/.venv/
+**/venv/
+
 # Archivos de autenticacion de registry (pueden contener tokens)
 .npmrc
 frontend/.npmrc

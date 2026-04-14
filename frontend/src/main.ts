@@ -1,3 +1,4 @@
+import '@richard-paredes-1/corp-style'
 import './assets/main.css'
 
 import { createApp } from 'vue'
