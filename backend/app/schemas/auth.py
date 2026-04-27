@@ -9,10 +9,13 @@ class LoginRequest(BaseModel):
 class LoginUser(BaseModel):
     id: str
     username: str
+    name: str = ""
+    last_name: str = ""
     fullname: str = ""
     email: str = ""
     area: str = ""
     rol_id: str | None = None
+    role_name: str = ""
 
 
 class LoginResponse(BaseModel):

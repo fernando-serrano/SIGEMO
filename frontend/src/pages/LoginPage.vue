@@ -2,10 +2,10 @@
 import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
-import LoginFormCard from '@/modules/auth/components/LoginFormCard.vue'
-import LoginHeroPanel from '@/modules/auth/components/LoginHeroPanel.vue'
-import LoginThemeSwitcher from '@/modules/auth/components/LoginThemeSwitcher.vue'
-import type { LoginUser, ThemeName } from '@/modules/auth/types'
+import LoginFormCard from '@/features/auth/components/LoginFormCard.vue'
+import LoginHeroPanel from '@/features/auth/components/LoginHeroPanel.vue'
+import LoginThemeSwitcher from '@/features/auth/components/LoginThemeSwitcher.vue'
+import type { LoginUser, ThemeName } from '@/features/auth/types'
 
 const router = useRouter()
 const STORAGE_KEY = 'sigemo-theme'

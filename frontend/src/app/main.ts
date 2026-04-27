@@ -1,5 +1,5 @@
 import '@richard-paredes-1/corp-style'
-import './assets/main.css'
+import './styles/main.css'
 
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'

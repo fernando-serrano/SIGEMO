@@ -3,7 +3,15 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import type { ThemeName } from '../types'
 
-const props = defineProps<{ modelValue: ThemeName }>()
+const props = withDefaults(
+  defineProps<{
+    modelValue: ThemeName
+    compact?: boolean
+  }>(),
+  {
+    compact: false,
+  },
+)
 
 const emit = defineEmits<{
   (event: 'update:modelValue', value: ThemeName): void
@@ -61,6 +69,7 @@ onBeforeUnmount(() => {
     <button
       type="button"
       class="badge badge--node auth-theme-trigger"
+      :class="{ 'auth-theme-trigger--compact': compact }"
       :data-theme-kind="currentOption?.kind ?? 'light'"
       :aria-expanded="isOpen"
       aria-controls="theme-bubbles"
@@ -139,7 +148,7 @@ onBeforeUnmount(() => {
         <path d="M14 9.5A6.5 6.5 0 0 1 6.5 2 6.5 6.5 0 1 0 14 9.5z" />
       </svg>
 
-      {{ currentLabel }}
+      <span v-if="!compact">{{ currentLabel }}</span>
     </button>
 
     <div id="theme-bubbles" class="auth-theme-bubbles" :class="{ 'auth-theme-bubbles--open': isOpen }" :aria-hidden="!isOpen">

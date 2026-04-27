@@ -1,6 +1,0 @@
-@import './styles/login.css';
-@import './styles/dashboard.css';
-
-#app {
-  min-height: 100vh;
-}

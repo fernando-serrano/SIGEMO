@@ -26,6 +26,13 @@ python -m pip install -r requirements.txt
 
 Configura variables en `.env` (usa `.env.example` como base).
 
+Variables relevantes:
+
+- `MONGODB_DB_NAME=sigemo_db`
+- `MONGODB_USERS_COLLECTION=usuarios`
+- `MONGODB_ROLES_COLLECTION=roles`
+- `MONGODB_USER_ROLES_COLLECTION=usuarios_roles`
+
 ## Ejecutar en desarrollo
 
 ```bash

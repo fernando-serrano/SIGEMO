@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import AppBrandLogo from '@/components/AppBrandLogo.vue'
+import AppBrandLogo from '@/shared/components/AppBrandLogo.vue'
 import type { ThemeName } from '../types'
 
 const props = defineProps<{ theme: ThemeName }>()

@@ -22,6 +22,14 @@ def get_users_collection():
     return get_db()[settings.users_collection]
 
 
+def get_roles_collection():
+    return get_db()[settings.roles_collection]
+
+
+def get_user_roles_collection():
+    return get_db()[settings.user_roles_collection]
+
+
 def ping() -> None:
     get_db().command({"ping": 1})
 

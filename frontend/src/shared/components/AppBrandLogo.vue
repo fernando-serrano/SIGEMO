@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import logoDark from '@/assets/brand/logo_liderman_dark.png'
-import logoLight from '@/assets/brand/logo_liderman_light.png'
+import logoDark from '@/shared/assets/brand/logo_liderman_dark.png'
+import logoLight from '@/shared/assets/brand/logo_liderman_light.png'
 
 const props = withDefaults(
   defineProps<{
