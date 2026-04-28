@@ -26,8 +26,20 @@ def get_roles_collection():
     return get_db()[settings.roles_collection]
 
 
+def get_permissions_collection():
+    return get_db()[settings.permissions_collection]
+
+
 def get_user_roles_collection():
     return get_db()[settings.user_roles_collection]
+
+
+def get_role_permissions_collection():
+    return get_db()[settings.role_permissions_collection]
+
+
+def get_user_permissions_collection():
+    return get_db()[settings.user_permissions_collection]
 
 
 def ping() -> None:

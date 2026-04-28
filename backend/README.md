@@ -31,7 +31,10 @@ Variables relevantes:
 - `MONGODB_DB_NAME=sigemo_db`
 - `MONGODB_USERS_COLLECTION=usuarios`
 - `MONGODB_ROLES_COLLECTION=roles`
+- `MONGODB_PERMISSIONS_COLLECTION=permisos`
 - `MONGODB_USER_ROLES_COLLECTION=usuarios_roles`
+- `MONGODB_ROLE_PERMISSIONS_COLLECTION=roles_permisos`
+- `MONGODB_USER_PERMISSIONS_COLLECTION=usuarios_permisos`
 
 ## Ejecutar en desarrollo
 
@@ -56,4 +59,3 @@ deactivate
   "username": "fserrano",
   "password": "fserrano"
 }
-```

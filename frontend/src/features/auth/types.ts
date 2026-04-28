@@ -2,7 +2,7 @@ export type ThemeName = 'dark' | 'light' | 'corp' | 'corp-dark'
 
 export interface LoginPayload {
   username: string
-  password: string
+  password_hash: string
 }
 
 export interface LoginUser {

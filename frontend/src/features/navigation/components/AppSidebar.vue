@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import type { ThemeName } from '@/features/auth/types'
+import AppBrandLogo from '@/shared/components/AppBrandLogo.vue'
 import AppSidebarMenu from './AppSidebarMenu.vue'
 
 interface UserSession {
@@ -41,6 +42,7 @@ const quickActions: SidebarItem[] = [
   {
     id: 'users',
     label: 'Usuarios',
+    to: '/usuarios',
     iconPath: 'M16 21V19C16 17.3 14.7 16 13 16H7C5.3 16 4 17.3 4 19V21 M19 21V19C19 17.55 18.2 16.29 17 15.62 M10 12C11.93 12 13.5 10.43 13.5 8.5C13.5 6.57 11.93 5 10 5C8.07 5 6.5 6.57 6.5 8.5C6.5 10.43 8.07 12 10 12 M17 11C18.38 11 19.5 9.88 19.5 8.5C19.5 7.12 18.38 6 17 6',
   },
   {
@@ -148,6 +150,10 @@ const currentThemeKind = computed<'light' | 'dark' | 'corp' | 'corp-dark'>(() =>
   }
 })
 
+const logoVariant = computed<'dark' | 'light'>(() =>
+  theme.value === 'light' || theme.value === 'corp' ? 'light' : 'dark',
+)
+
 applyTheme(theme.value)
 
 watch(theme, (selectedTheme) => {
@@ -159,14 +165,11 @@ watch(theme, (selectedTheme) => {
   <aside class="sidebar sidebar--acrylic sigemo-sidebar" aria-label="Navegacion lateral">
     <section class="sidebar__header sigemo-sidebar-brand">
       <div class="sigemo-sidebar-brand-main">
-        <span class="avatar avatar--sm sigemo-brand-avatar" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" class="sigemo-brand-avatar-icon">
-            <rect x="4" y="4" width="16" height="16" stroke="currentColor" stroke-width="1.8" />
-            <path d="M12 8V16 M8 12H16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-          </svg>
-        </span>
         <div>
-          <p class="sidebar__title">SIGEMO</p>
+          <p class="sidebar__title sigemo-sidebar-logo-wrap">
+            <AppBrandLogo :variant="logoVariant" class="sigemo-sidebar-logo" />
+          </p>
+          <p class="glow-text--strong sigemo-sidebar-system-name">SIGEMO</p>
         </div>
       </div>
 

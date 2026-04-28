@@ -31,7 +31,10 @@ class Settings:
     db_name: str
     users_collection: str
     roles_collection: str
+    permissions_collection: str
     user_roles_collection: str
+    role_permissions_collection: str
+    user_permissions_collection: str
 
 
 _database_url = os.getenv("DATABASE_URL", "").strip()
@@ -40,7 +43,10 @@ _db_name = _sanitize_db_name(
 )
 _users_collection = os.getenv("MONGODB_USERS_COLLECTION", "users").strip() or "users"
 _roles_collection = os.getenv("MONGODB_ROLES_COLLECTION", "roles").strip() or "roles"
+_permissions_collection = os.getenv("MONGODB_PERMISSIONS_COLLECTION", "permisos").strip() or "permisos"
 _user_roles_collection = os.getenv("MONGODB_USER_ROLES_COLLECTION", "usuarios_roles").strip() or "usuarios_roles"
+_role_permissions_collection = os.getenv("MONGODB_ROLE_PERMISSIONS_COLLECTION", "roles_permisos").strip() or "roles_permisos"
+_user_permissions_collection = os.getenv("MONGODB_USER_PERMISSIONS_COLLECTION", "usuarios_permisos").strip() or "usuarios_permisos"
 
 if not _database_url:
     raise RuntimeError("Falta DATABASE_URL en backend/.env")
@@ -53,5 +59,8 @@ settings = Settings(
     db_name=_db_name,
     users_collection=_users_collection,
     roles_collection=_roles_collection,
+    permissions_collection=_permissions_collection,
     user_roles_collection=_user_roles_collection,
+    role_permissions_collection=_role_permissions_collection,
+    user_permissions_collection=_user_permissions_collection,
 )

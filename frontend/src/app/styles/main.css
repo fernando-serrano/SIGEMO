@@ -1,5 +1,6 @@
 @import '@/features/auth/styles/auth.css';
 @import '@/features/dashboard/styles/dashboard.css';
+@import '@/features/users/styles/users.css';
 
 #app {
   min-height: 100vh;

@@ -1,14 +1,20 @@
 :root {
   --sigemo-layout-max: 1240px;
+  --sigemo-glass-border: color-mix(in srgb, var(--fa-color-accent) 20%, var(--fa-color-border));
+  --sigemo-glass-fill: color-mix(in srgb, var(--fa-color-bg-surface-1) 62%, transparent);
+  --sigemo-glass-fill-strong: color-mix(in srgb, var(--fa-color-bg-surface-2) 74%, transparent);
+  --sigemo-glass-shadow: 0 20px 56px color-mix(in srgb, var(--fa-color-bg-base) 34%, transparent);
 }
 
 .dashboard-shell {
   min-height: 100vh;
+  height: 100vh;
   position: relative;
   isolation: isolate;
   overflow: hidden;
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
+  align-items: start;
   background:
     radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--fa-color-accent) 14%, transparent), transparent 32%),
     radial-gradient(circle at 92% 8%, color-mix(in srgb, var(--fa-color-info) 14%, transparent), transparent 36%),
@@ -52,6 +58,7 @@
   min-width: 0;
   position: relative;
   z-index: 2;
+  height: 100vh;
 }
 
 .dashboard-sidebar-backdrop {
@@ -60,29 +67,42 @@
 
 .dashboard-main {
   min-width: 0;
+  min-height: 100vh;
+  max-height: 100vh;
+  overflow-y: auto;
   padding: var(--fa-space-6) var(--fa-space-8);
   position: relative;
   z-index: 1;
 }
 
 .sigemo-sidebar {
+  position: sticky;
+  top: 0;
   width: 260px;
   min-width: 260px;
+  height: 100vh;
   min-height: 100vh;
+  overflow-y: auto;
   padding: var(--fa-space-4);
   display: flex;
   flex-direction: column;
   gap: var(--fa-space-2);
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--fa-color-bg-surface-1) 88%, transparent), color-mix(in srgb, var(--fa-color-bg-base) 96%, transparent)),
-    radial-gradient(circle at 20% 0%, color-mix(in srgb, var(--fa-color-accent) 12%, transparent), transparent 38%);
-  box-shadow: 18px 0 50px color-mix(in srgb, var(--fa-color-bg-base) 24%, transparent);
+    linear-gradient(180deg, color-mix(in srgb, var(--fa-color-bg-surface-1) 70%, transparent), color-mix(in srgb, var(--fa-color-bg-base) 82%, transparent)),
+    radial-gradient(circle at 20% 0%, color-mix(in srgb, var(--fa-color-accent) 16%, transparent), transparent 38%),
+    linear-gradient(135deg, color-mix(in srgb, white 4%, transparent), transparent 42%);
+  border-right: var(--fa-border-width) solid color-mix(in srgb, var(--sigemo-glass-border) 78%, transparent);
+  box-shadow:
+    inset 1px 0 0 color-mix(in srgb, white 5%, transparent),
+    18px 0 50px color-mix(in srgb, var(--fa-color-bg-base) 24%, transparent);
+  backdrop-filter: blur(20px) saturate(132%);
+  -webkit-backdrop-filter: blur(20px) saturate(132%);
 }
 
 .sigemo-sidebar-brand {
-  border: var(--fa-border-width) solid var(--fa-color-border);
-  background: color-mix(in srgb, var(--fa-color-bg-surface-2) 82%, transparent);
-  padding: var(--fa-space-4);
+  border: 0;
+  background: transparent;
+  padding: var(--fa-space-2) var(--fa-space-4) var(--fa-space-3);
   margin-bottom: var(--fa-space-2);
   display: flex;
   align-items: center;
@@ -92,8 +112,9 @@
 
 .sigemo-sidebar-brand-main {
   min-width: 0;
-  display: inline-flex;
-  align-items: center;
+  display: flex;
+  justify-content: center;
+  width: 100%;
 }
 
 .sigemo-brand-avatar {
@@ -105,6 +126,46 @@
 .sigemo-brand-avatar-icon {
   width: 16px;
   height: 16px;
+}
+
+.sigemo-sidebar-logo-wrap {
+  margin: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+}
+
+.sigemo-sidebar-brand-main > div {
+  min-width: 0;
+  width: 100%;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.sigemo-sidebar-logo {
+  display: block;
+  width: min(192px, 100%);
+  max-height: 50px;
+  object-fit: contain;
+  object-position: center;
+  filter:
+    drop-shadow(0 0 8px color-mix(in srgb, var(--fa-color-accent) 18%, transparent))
+    drop-shadow(0 0 16px color-mix(in srgb, var(--fa-color-info) 10%, transparent));
+}
+
+.sigemo-sidebar-system-name {
+  margin: 0;
+  font-size: 1.22rem;
+  font-weight: var(--fa-font-weight-bold);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  line-height: 1;
+  text-align: center;
+  text-shadow:
+    0 0 6px color-mix(in srgb, currentColor 18%, transparent),
+    0 0 12px color-mix(in srgb, currentColor 10%, transparent);
 }
 
 .sigemo-sidebar-close {
@@ -122,6 +183,12 @@
 
 .sigemo-nav-item-wrap {
   width: 100%;
+}
+
+.sigemo-nav-list .nav-item {
+  background: color-mix(in srgb, var(--sigemo-glass-fill) 74%, transparent);
+  backdrop-filter: blur(10px) saturate(118%);
+  -webkit-backdrop-filter: blur(10px) saturate(118%);
 }
 
 .sigemo-nav-icon {
@@ -167,8 +234,12 @@
   align-items: center;
   gap: var(--fa-space-2);
   padding: var(--fa-space-3);
-  border: var(--fa-border-width) solid color-mix(in srgb, var(--fa-color-border) 82%, transparent);
-  background: color-mix(in srgb, var(--fa-color-bg-surface-1) 72%, transparent);
+  border: var(--fa-border-width) solid color-mix(in srgb, var(--sigemo-glass-border) 72%, transparent);
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--sigemo-glass-fill) 88%, transparent), color-mix(in srgb, var(--fa-color-bg-base) 72%, transparent)),
+    linear-gradient(135deg, color-mix(in srgb, white 4%, transparent), transparent 44%);
+  backdrop-filter: blur(14px) saturate(124%);
+  -webkit-backdrop-filter: blur(14px) saturate(124%);
 }
 
 .sigemo-sidebar-user-meta {
@@ -327,20 +398,15 @@
   position: relative;
   overflow: hidden;
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--fa-color-bg-surface-1) 94%, transparent), color-mix(in srgb, var(--fa-color-bg-base) 98%, transparent)),
-    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--fa-color-info) 10%, transparent), transparent 34%);
+    linear-gradient(135deg, color-mix(in srgb, var(--fa-color-bg-surface-1) 64%, transparent), color-mix(in srgb, var(--fa-color-bg-base) 78%, transparent)),
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--fa-color-info) 12%, transparent), transparent 34%),
+    linear-gradient(135deg, color-mix(in srgb, white 4%, transparent), transparent 42%);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, white 4%, transparent),
-    0 18px 48px color-mix(in srgb, var(--fa-color-bg-base) 22%, transparent);
-}
-
-.tracking-card::before {
-  content: '';
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 2px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--fa-color-accent) 90%, white), transparent 88%);
-  opacity: 0.72;
+    var(--sigemo-glass-shadow);
+  border-color: color-mix(in srgb, var(--sigemo-glass-border) 76%, transparent);
+  backdrop-filter: blur(20px) saturate(128%);
+  -webkit-backdrop-filter: blur(20px) saturate(128%);
 }
 
 .tracking-filters-grid {
@@ -374,6 +440,7 @@
 .tracking-table-wrap {
   padding-top: var(--fa-space-2);
   overflow-x: auto;
+  position: relative;
 }
 
 .tracking-table {
@@ -387,15 +454,19 @@
 }
 
 .tracking-table thead th {
-  background: color-mix(in srgb, var(--fa-color-bg-surface-2) 72%, transparent);
+  background: color-mix(in srgb, var(--fa-color-bg-surface-2) 52%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .tracking-table tbody tr {
-  background: color-mix(in srgb, var(--fa-color-bg-base) 12%, transparent);
+  background: color-mix(in srgb, var(--fa-color-bg-base) 8%, transparent);
 }
 
 .tracking-table tbody tr:hover {
-  background: linear-gradient(90deg, color-mix(in srgb, var(--fa-color-accent) 9%, transparent), transparent 52%);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--fa-color-accent) 12%, transparent), transparent 52%),
+    color-mix(in srgb, var(--fa-color-bg-base) 6%, transparent);
 }
 
 .tracking-eye-disabled {
@@ -411,6 +482,7 @@
   .dashboard-shell {
     grid-template-columns: 1fr;
     position: relative;
+    height: auto;
   }
 
   .dashboard-sidebar-layer {
@@ -446,12 +518,18 @@
   }
 
   .dashboard-main {
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
     padding-top: var(--fa-space-5);
   }
 
   .sigemo-sidebar {
+    position: relative;
+    top: auto;
     width: 100%;
     min-width: 0;
+    height: auto;
     min-height: 100vh;
     border-right: var(--fa-border-width) solid var(--fa-color-border);
     border-bottom: 0;
@@ -475,13 +553,6 @@
 
   .tracking-filters-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .dashboard-shell::before,
-  .dashboard-shell::after {
-    animation: none;
   }
 }
 

@@ -36,7 +36,7 @@ async function handleSubmit(event: Event): Promise<void> {
   try {
     const user = await login({
       username: username.value.trim(),
-      password: password.value,
+      password_hash: password.value,
     })
 
     setStatus(`Bienvenido, ${user.username}`, 'success')
