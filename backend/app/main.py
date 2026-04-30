@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.db import close_client, ping
+from app.db import close_client, ensure_indexes, ping
 from app.routers.auth import router as auth_router
 from app.routers.users import router as users_router
 
@@ -11,11 +11,12 @@ from app.routers.users import router as users_router
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     ping()
+    ensure_indexes()
     yield
     close_client()
 
 
-app = FastAPI(title="SIGEMO API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="MGA GADSO API - Modulo SIGEMO", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -34,4 +35,4 @@ app.include_router(users_router)
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "service": "sigemo-backend-fastapi"}
+    return {"ok": True, "service": "mga-gadso-backend", "module": "sigemo"}

@@ -114,7 +114,7 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
-      <TrackingPageHeader section="EMOS" page-title="SEGUIMIENTO EMO'S" />
+      <TrackingPageHeader />
       <TrackingFiltersPanel @apply="handleApplyFilters" />
       <TrackingResultsTable :rows="filteredRows" :can-view-detail="canViewDetail" />
     </section>

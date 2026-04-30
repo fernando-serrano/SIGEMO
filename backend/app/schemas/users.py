@@ -9,6 +9,8 @@ class PermissionSummary(BaseModel):
     accion: str = ""
     descripcion: str = ""
     estado: bool = True
+    role_ids: list[str] = Field(default_factory=list)
+    user_ids: list[str] = Field(default_factory=list)
 
 
 class RoleSummary(BaseModel):
@@ -18,6 +20,7 @@ class RoleSummary(BaseModel):
     descripcion: str = ""
     estado: bool = True
     permission_ids: list[str] = Field(default_factory=list)
+    user_ids: list[str] = Field(default_factory=list)
 
 
 class UserSummary(BaseModel):
@@ -66,8 +69,29 @@ class RolePermissionsRequest(BaseModel):
     permission_ids: list[str] = Field(default_factory=list)
 
 
+class RoleUpsertRequest(BaseModel):
+    codigo: str = Field(min_length=1)
+    nombre: str = Field(min_length=1)
+    descripcion: str = ""
+    estado: bool = True
+    permission_ids: list[str] = Field(default_factory=list)
+    user_ids: list[str] = Field(default_factory=list)
+
+
+class PermissionUpsertRequest(BaseModel):
+    codigo: str = Field(min_length=1)
+    nombre: str = Field(min_length=1)
+    modulo: str = ""
+    accion: str = ""
+    descripcion: str = ""
+    estado: bool = True
+    role_ids: list[str] = Field(default_factory=list)
+    user_ids: list[str] = Field(default_factory=list)
+
+
 class MutationResponse(BaseModel):
     ok: bool
     message: str
     user: UserSummary | None = None
     role: RoleSummary | None = None
+    permission: PermissionSummary | None = None

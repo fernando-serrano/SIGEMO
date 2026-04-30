@@ -1,17 +1,39 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 import AppSidebar from '@/features/navigation/components/AppSidebar.vue'
+import TrackingPageHeader from '@/features/dashboard/components/TrackingPageHeader.vue'
+import PermissionsSubmodulePanel from '@/features/users/components/PermissionsSubmodulePanel.vue'
+import RolesSubmodulePanel from '@/features/users/components/RolesSubmodulePanel.vue'
+import UsersSubmodulePanel from '@/features/users/components/UsersSubmodulePanel.vue'
 import {
+  createPermission,
+  createRole,
   createUser,
   fetchAccessCatalog,
-  updateRolePermissions,
+  updatePermission,
+  updateRole,
   updateUser,
   updateUserStatus,
 } from '@/features/users/api/users.api'
-import type { AccessPermission, AccessRole, AccessUser, UserPayload } from '@/features/users/types'
+import type {
+  AccessPermission,
+  AccessRole,
+  AccessUser,
+  PermissionPayload,
+  RolePayload,
+  UserPayload,
+} from '@/features/users/types'
 import AppShell from '@/shared/layouts/AppShell.vue'
 
+type FeedbackTone = 'success' | 'warning' | 'danger' | 'accent'
+type UserFieldKey = 'username' | 'name' | 'last_name' | 'email' | 'area'
+type RoleFieldKey = 'codigo' | 'nombre'
+type PermissionFieldKey = 'codigo' | 'nombre' | 'modulo' | 'accion'
+
+const route = useRoute()
+const router = useRouter()
 const mobileBreakpoint = window.matchMedia('(max-width: 1080px)')
 
 const isSidebarOpen = ref(false)
@@ -19,14 +41,27 @@ const isLoading = ref(true)
 const loadError = ref('')
 const userFeedback = ref('')
 const roleFeedback = ref('')
+const permissionFeedback = ref('')
 const searchTerm = ref('')
+const roleSearchTerm = ref('')
 const permissionSearchTerm = ref('')
 const selectedUserId = ref<string | null>(null)
 const selectedRoleId = ref<string | null>(null)
+const selectedPermissionId = ref<string | null>(null)
 const formMode = ref<'create' | 'edit'>('create')
-const activeSection = ref<'usuarios' | 'roles' | 'permisos'>('usuarios')
+const roleFormMode = ref<'create' | 'edit'>('create')
+const permissionFormMode = ref<'create' | 'edit'>('create')
 const isSavingUser = ref(false)
 const isSavingRole = ref(false)
+const isSavingPermission = ref(false)
+const userFeedbackTone = ref<FeedbackTone>('accent')
+const roleFeedbackTone = ref<FeedbackTone>('accent')
+const permissionFeedbackTone = ref<FeedbackTone>('accent')
+const userValidationAttempted = ref(false)
+const roleValidationAttempted = ref(false)
+const permissionValidationAttempted = ref(false)
+const toastQueue = ref<Array<{ id: number; title: string; message: string; tone: FeedbackTone }>>([])
+let toastSequence = 0
 
 const catalog = reactive<{
   users: AccessUser[]
@@ -50,7 +85,25 @@ const form = reactive<UserPayload>({
   permission_ids: [],
 })
 
-const rolePermissionDraft = ref<string[]>([])
+const roleForm = reactive<RolePayload>({
+  codigo: '',
+  nombre: '',
+  descripcion: '',
+  estado: true,
+  permission_ids: [],
+  user_ids: [],
+})
+
+const permissionForm = reactive<PermissionPayload>({
+  codigo: '',
+  nombre: '',
+  modulo: '',
+  accion: '',
+  descripcion: '',
+  estado: true,
+  role_ids: [],
+  user_ids: [],
+})
 
 const summary = computed(() => ({
   users: catalog.users.length,
@@ -58,6 +111,39 @@ const summary = computed(() => ({
   roles: catalog.roles.length,
   permissions: catalog.permissions.length,
 }))
+
+const activeSection = computed<'usuarios' | 'roles' | 'permisos'>(() => {
+  const section = String(route.meta.userSection ?? 'usuarios').trim()
+  return section === 'roles' || section === 'permisos' ? section : 'usuarios'
+})
+
+const userViewMode = computed<'list' | 'create' | 'edit'>(() => {
+  const mode = String(route.meta.userMode ?? 'list').trim()
+  return mode === 'create' || mode === 'edit' ? mode : 'list'
+})
+
+const userStep = computed<'datos' | 'roles' | 'permisos' | 'resumen'>(() => {
+  const step = String(route.meta.userStep ?? 'datos').trim()
+  return step === 'roles' || step === 'permisos' || step === 'resumen' ? step : 'datos'
+})
+
+const isUserWizard = computed(() => activeSection.value === 'usuarios' && userViewMode.value !== 'list')
+
+const heroDescription = computed(() => {
+  if (activeSection.value === 'roles') {
+    return 'Administra los roles del sistema, sus permisos base y los usuarios que los heredan.'
+  }
+
+  if (activeSection.value === 'permisos') {
+    return 'Gestiona el catalogo de permisos y distribuyelo por roles o usuarios puntuales.'
+  }
+
+  if (isUserWizard.value) {
+    return 'Completa el flujo por pasos para registrar o actualizar un usuario sin saturar la vista principal.'
+  }
+
+  return 'Consulta datos del usuario, edita su ficha y controla su acceso operativo.'
+})
 
 const filteredUsers = computed(() => {
   const query = searchTerm.value.trim().toLowerCase()
@@ -71,15 +157,63 @@ const filteredUsers = computed(() => {
   )
 })
 
-const selectedRole = computed(() => catalog.roles.find((role) => role.id === selectedRoleId.value) ?? null)
+const sortedUsers = computed(() =>
+  [...catalog.users].sort((left, right) => (left.fullname || left.username).localeCompare(right.fullname || right.username)),
+)
 
-const filteredRoles = computed(() => [...catalog.roles].sort((left, right) => left.nombre.localeCompare(right.nombre)))
+const filteredRoles = computed(() => {
+  const query = roleSearchTerm.value.trim().toLowerCase()
+  const roles = [...catalog.roles].sort((left, right) => left.nombre.localeCompare(right.nombre))
+
+  if (!query) {
+    return roles
+  }
+
+  return roles.filter((role) =>
+    [role.codigo, role.nombre, role.descripcion].join(' ').toLowerCase().includes(query),
+  )
+})
+
+const filteredPermissions = computed(() => {
+  const query = permissionSearchTerm.value.trim().toLowerCase()
+  const permissions = [...catalog.permissions].sort((left, right) =>
+    [left.modulo, left.nombre].join(' ').localeCompare([right.modulo, right.nombre].join(' ')),
+  )
+
+  if (!query) {
+    return permissions
+  }
+
+  return permissions.filter((permission) =>
+    [permission.codigo, permission.nombre, permission.modulo, permission.accion, permission.descripcion]
+      .join(' ')
+      .toLowerCase()
+      .includes(query),
+  )
+})
+
+const selectedUser = computed(() => catalog.users.find((user) => user.id === selectedUserId.value) ?? null)
+
+const selectedFormRoles = computed(() =>
+  catalog.roles.filter((role) => form.role_ids.includes(role.id)).sort((left, right) => left.nombre.localeCompare(right.nombre)),
+)
+
+const inheritedPermissionIds = computed(() => {
+  const ids = selectedFormRoles.value.flatMap((role) => role.permission_ids)
+  return [...new Set(ids)]
+})
+
+const directPermissionIds = computed(() =>
+  form.permission_ids.filter((permissionId) => !inheritedPermissionIds.value.includes(permissionId)),
+)
+
+const effectivePermissionIdsPreview = computed(() => [...new Set([...inheritedPermissionIds.value, ...directPermissionIds.value])])
 
 const permissionsByModule = computed(() => {
   const grouped = new Map<string, AccessPermission[]>()
 
   for (const permission of catalog.permissions) {
-    const moduleName = permission.modulo || 'general'
+    const moduleName = permission.modulo || 'General'
     const bucket = grouped.get(moduleName) ?? []
     bucket.push(permission)
     grouped.set(moduleName, bucket)
@@ -88,27 +222,162 @@ const permissionsByModule = computed(() => {
   return [...grouped.entries()]
     .map(([moduleName, permissions]) => ({
       moduleName,
-      permissions,
+      permissions: [...permissions].sort((left, right) => left.nombre.localeCompare(right.nombre)),
     }))
     .sort((left, right) => left.moduleName.localeCompare(right.moduleName))
 })
 
-const filteredPermissionsByModule = computed(() => {
-  const query = permissionSearchTerm.value.trim().toLowerCase()
+const userWizardSteps = [
+  { id: 'datos', label: 'Datos' },
+  { id: 'roles', label: 'Roles' },
+  { id: 'permisos', label: 'Permisos' },
+  { id: 'resumen', label: 'Resumen' },
+] as const
 
-  if (!query) {
-    return permissionsByModule.value
+const currentWizardStepIndex = computed(() =>
+  Math.max(0, userWizardSteps.findIndex((step) => step.id === userStep.value)),
+)
+
+const wizardTitle = computed(() => (userViewMode.value === 'create' ? 'Nuevo Usuario' : 'Editar Usuario'))
+
+const wizardPrimaryLabel = computed(() => {
+  if (userStep.value === 'resumen') {
+    return isSavingUser.value
+      ? 'Guardando...'
+      : userViewMode.value === 'create'
+        ? 'Crear usuario'
+        : 'Guardar cambios'
   }
+
+  return 'Siguiente'
+})
+
+const wizardSecondaryLabel = computed(() => (currentWizardStepIndex.value === 0 ? 'Cancelar' : 'Anterior'))
+
+const userFormErrors = computed<Record<UserFieldKey, string>>(() => ({
+  username: form.username.trim() ? '' : 'Ingresa el username del usuario.',
+  name: form.name.trim() ? '' : 'Ingresa los nombres.',
+  last_name: form.last_name.trim() ? '' : 'Ingresa los apellidos.',
+  email: !form.email.trim()
+    ? 'Ingresa el correo corporativo.'
+    : /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())
+      ? ''
+      : 'Ingresa un correo valido.',
+  area: form.area.trim() ? '' : 'Ingresa el area del usuario.',
+}))
+
+const roleFormErrors = computed<Record<RoleFieldKey, string>>(() => ({
+  codigo: roleForm.codigo.trim() ? '' : 'Ingresa el codigo del rol.',
+  nombre: roleForm.nombre.trim() ? '' : 'Ingresa el nombre del rol.',
+}))
+
+const permissionFormErrors = computed<Record<PermissionFieldKey, string>>(() => ({
+  codigo: permissionForm.codigo.trim() ? '' : 'Ingresa el codigo del permiso.',
+  nombre: permissionForm.nombre.trim() ? '' : 'Ingresa el nombre del permiso.',
+  modulo: permissionForm.modulo.trim() ? '' : 'Ingresa el modulo asociado.',
+  accion: permissionForm.accion.trim() ? '' : 'Ingresa la accion del permiso.',
+}))
+
+function pushToast(title: string, message: string, tone: FeedbackTone): void {
+  const id = ++toastSequence
+  toastQueue.value = [...toastQueue.value, { id, title, message, tone }]
+  window.setTimeout(() => {
+    toastQueue.value = toastQueue.value.filter((toast) => toast.id !== id)
+  }, 5000)
+}
+
+function dismissToast(toastId: number): void {
+  toastQueue.value = toastQueue.value.filter((toast) => toast.id !== toastId)
+}
+
+function hasUserFormErrors(): boolean {
+  return Object.values(userFormErrors.value).some(Boolean)
+}
+
+function hasRoleFormErrors(): boolean {
+  return Object.values(roleFormErrors.value).some(Boolean)
+}
+
+function hasPermissionFormErrors(): boolean {
+  return Object.values(permissionFormErrors.value).some(Boolean)
+}
+
+function isDatosStepComplete(): boolean {
+  return !hasUserFormErrors()
+}
+
+function isRolesStepComplete(): boolean {
+  return form.role_ids.length > 0
+}
+
+function isPermisosStepComplete(): boolean {
+  return true
+}
+
+function isWizardStepComplete(stepId: (typeof userWizardSteps)[number]['id']): boolean {
+  if (stepId === 'datos') {
+    return isDatosStepComplete()
+  }
+
+  if (stepId === 'roles') {
+    return isRolesStepComplete()
+  }
+
+  if (stepId === 'permisos') {
+    return isPermisosStepComplete()
+  }
+
+  return isDatosStepComplete() && isRolesStepComplete() && isPermisosStepComplete()
+}
+
+function canAccessWizardStep(stepIndex: number): boolean {
+  if (stepIndex <= 0) {
+    return true
+  }
+
+  for (let index = 0; index < stepIndex; index += 1) {
+    const previousStep = userWizardSteps[index]
+    if (previousStep && !isWizardStepComplete(previousStep.id)) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function getWizardBlockMessage(stepId: (typeof userWizardSteps)[number]['id']): string {
+  if (stepId === 'roles') {
+    return 'Completa primero los datos base del usuario antes de pasar a roles.'
+  }
+
+  if (stepId === 'permisos') {
+    return 'Define al menos un rol antes de pasar a permisos.'
+  }
+
+  return 'Completa los pasos previos antes de revisar el resumen final.'
+}
+
+function groupPermissionsByIds(permissionIds: string[]) {
+  const permissionSet = new Set(permissionIds)
 
   return permissionsByModule.value
     .map((group) => ({
       moduleName: group.moduleName,
-      permissions: group.permissions.filter((permission) =>
-        [permission.codigo, permission.nombre, permission.accion, permission.descripcion]
-          .join(' ')
-          .toLowerCase()
-          .includes(query),
-      ),
+      permissions: group.permissions.filter((permission) => permissionSet.has(permission.id)),
+    }))
+    .filter((group) => group.permissions.length > 0)
+}
+
+const inheritedPermissionsByModule = computed(() => groupPermissionsByIds(inheritedPermissionIds.value))
+const effectivePermissionsByModule = computed(() => groupPermissionsByIds(effectivePermissionIdsPreview.value))
+
+const availableDirectPermissionsByModule = computed(() => {
+  const inheritedSet = new Set(inheritedPermissionIds.value)
+
+  return permissionsByModule.value
+    .map((group) => ({
+      moduleName: group.moduleName,
+      permissions: group.permissions.filter((permission) => !inheritedSet.has(permission.id)),
     }))
     .filter((group) => group.permissions.length > 0)
 })
@@ -149,6 +418,29 @@ function resetForm(): void {
   form.is_active = true
   form.role_ids = []
   form.permission_ids = []
+  userValidationAttempted.value = false
+}
+
+function resetRoleForm(): void {
+  roleForm.codigo = ''
+  roleForm.nombre = ''
+  roleForm.descripcion = ''
+  roleForm.estado = true
+  roleForm.permission_ids = []
+  roleForm.user_ids = []
+  roleValidationAttempted.value = false
+}
+
+function resetPermissionForm(): void {
+  permissionForm.codigo = ''
+  permissionForm.nombre = ''
+  permissionForm.modulo = ''
+  permissionForm.accion = ''
+  permissionForm.descripcion = ''
+  permissionForm.estado = true
+  permissionForm.role_ids = []
+  permissionForm.user_ids = []
+  permissionValidationAttempted.value = false
 }
 
 function syncFormWithUser(user: AccessUser): void {
@@ -163,39 +455,191 @@ function syncFormWithUser(user: AccessUser): void {
   form.permission_ids = [...user.permission_ids]
 }
 
-function selectUser(user: AccessUser): void {
-  selectedUserId.value = user.id
-  formMode.value = 'edit'
-  userFeedback.value = ''
-  syncFormWithUser(user)
+function syncFormWithRole(role: AccessRole): void {
+  roleForm.codigo = role.codigo
+  roleForm.nombre = role.nombre
+  roleForm.descripcion = role.descripcion
+  roleForm.estado = role.estado
+  roleForm.permission_ids = [...role.permission_ids]
+  roleForm.user_ids = [...role.user_ids]
 }
 
-function selectRole(roleId: string): void {
-  selectedRoleId.value = roleId
-  roleFeedback.value = ''
+function syncFormWithPermission(permission: AccessPermission): void {
+  permissionForm.codigo = permission.codigo
+  permissionForm.nombre = permission.nombre
+  permissionForm.modulo = permission.modulo
+  permissionForm.accion = permission.accion
+  permissionForm.descripcion = permission.descripcion
+  permissionForm.estado = permission.estado
+  permissionForm.role_ids = [...permission.role_ids]
+  permissionForm.user_ids = [...permission.user_ids]
 }
 
-function startCreateUser(): void {
+function beginCreateUser(): void {
   selectedUserId.value = null
   formMode.value = 'create'
   userFeedback.value = ''
+  userFeedbackTone.value = 'accent'
   resetForm()
+  void router.push('/usuarios/usuarios/nuevo/datos')
 }
 
-function toggleSelection(collection: string[], value: string): string[] {
-  return collection.includes(value) ? collection.filter((item) => item !== value) : [...collection, value]
+function beginEditUser(user: AccessUser): void {
+  selectedUserId.value = user.id
+  formMode.value = 'edit'
+  userFeedback.value = ''
+  userFeedbackTone.value = 'accent'
+  userValidationAttempted.value = false
+  syncFormWithUser(user)
+  void router.push(`/usuarios/usuarios/${user.id}/editar/datos`)
 }
 
-function toggleFormRole(roleId: string): void {
-  form.role_ids = toggleSelection(form.role_ids, roleId)
+function openUserDetail(user: AccessUser): void {
+  selectedUserId.value = user.id
 }
 
-function toggleFormPermission(permissionId: string): void {
-  form.permission_ids = toggleSelection(form.permission_ids, permissionId)
+function cancelUserWizard(): void {
+  userFeedback.value = ''
+  userFeedbackTone.value = 'accent'
+  if (userViewMode.value === 'create') {
+    resetForm()
+  }
+  void router.push('/usuarios/usuarios')
 }
 
-function toggleRoleDraftPermission(permissionId: string): void {
-  rolePermissionDraft.value = toggleSelection(rolePermissionDraft.value, permissionId)
+function buildUserWizardPath(stepId: (typeof userWizardSteps)[number]['id']): string {
+  if (userViewMode.value === 'edit' && route.params.userId) {
+    return `/usuarios/usuarios/${String(route.params.userId)}/editar/${stepId}`
+  }
+
+  return `/usuarios/usuarios/nuevo/${stepId}`
+}
+
+function goToUserWizardStep(stepId: (typeof userWizardSteps)[number]['id']): void {
+  if (!isUserWizard.value) {
+    return
+  }
+
+  const targetIndex = userWizardSteps.findIndex((step) => step.id === stepId)
+  if (targetIndex === -1) {
+    return
+  }
+
+  if (!canAccessWizardStep(targetIndex)) {
+    userFeedbackTone.value = 'warning'
+    userFeedback.value = getWizardBlockMessage(stepId)
+    return
+  }
+
+  void router.push(buildUserWizardPath(stepId))
+}
+
+function goToPreviousWizardStep(): void {
+  if (currentWizardStepIndex.value === 0) {
+    cancelUserWizard()
+    return
+  }
+
+  const previousStep = userWizardSteps[currentWizardStepIndex.value - 1]
+  if (previousStep) {
+    goToUserWizardStep(previousStep.id)
+  }
+}
+
+async function handleWizardPrimaryAction(): Promise<void> {
+  userFeedback.value = ''
+
+  if (userStep.value === 'datos' && !isDatosStepComplete()) {
+    userValidationAttempted.value = true
+    userFeedbackTone.value = 'warning'
+    userFeedback.value = 'Corrige los campos obligatorios antes de continuar.'
+    return
+  }
+
+  if (userStep.value === 'roles' && !isRolesStepComplete()) {
+    userFeedbackTone.value = 'warning'
+    userFeedback.value = 'Selecciona al menos un rol antes de continuar.'
+    return
+  }
+
+  if (userStep.value === 'resumen') {
+    await saveUser()
+    return
+  }
+
+  const nextStep = userWizardSteps[currentWizardStepIndex.value + 1]
+  if (nextStep) {
+    goToUserWizardStep(nextStep.id)
+  }
+}
+
+function startCreateRole(): void {
+  selectedRoleId.value = null
+  roleFormMode.value = 'create'
+  roleFeedback.value = ''
+  roleFeedbackTone.value = 'accent'
+  resetRoleForm()
+}
+
+function startCreatePermission(): void {
+  selectedPermissionId.value = null
+  permissionFormMode.value = 'create'
+  permissionFeedback.value = ''
+  permissionFeedbackTone.value = 'accent'
+  resetPermissionForm()
+}
+
+function selectRole(role: AccessRole): void {
+  selectedRoleId.value = role.id
+  roleFormMode.value = 'edit'
+  roleFeedback.value = ''
+  roleFeedbackTone.value = 'accent'
+  roleValidationAttempted.value = false
+  syncFormWithRole(role)
+}
+
+function selectPermission(permission: AccessPermission): void {
+  selectedPermissionId.value = permission.id
+  permissionFormMode.value = 'edit'
+  permissionFeedback.value = ''
+  permissionFeedbackTone.value = 'accent'
+  permissionValidationAttempted.value = false
+  syncFormWithPermission(permission)
+}
+
+function syncUserWizardFromRoute(): void {
+  if (activeSection.value !== 'usuarios') {
+    return
+  }
+
+  if (userViewMode.value === 'list') {
+    return
+  }
+
+  if (userViewMode.value === 'create') {
+    if (formMode.value !== 'create') {
+      formMode.value = 'create'
+      resetForm()
+    }
+    userFeedback.value = ''
+    userFeedbackTone.value = 'accent'
+    return
+  }
+
+  const routeUserId = String(route.params.userId ?? '').trim()
+  if (!routeUserId) {
+    return
+  }
+
+  selectedUserId.value = routeUserId
+  formMode.value = 'edit'
+  userFeedback.value = ''
+  userFeedbackTone.value = 'accent'
+
+  const existingUser = catalog.users.find((user) => user.id === routeUserId)
+  if (existingUser) {
+    syncFormWithUser(existingUser)
+  }
 }
 
 async function loadModuleData(): Promise<void> {
@@ -208,20 +652,27 @@ async function loadModuleData(): Promise<void> {
     catalog.roles = response.roles
     catalog.permissions = response.permissions
 
-    if (!selectedRoleId.value && response.roles.length > 0) {
-      selectedRoleId.value = response.roles[0]?.id ?? null
-    }
-
-    if (selectedUserId.value) {
+    if (selectedUserId.value && !isUserWizard.value) {
       const refreshedUser = response.users.find((user) => user.id === selectedUserId.value)
-      if (refreshedUser) {
-        syncFormWithUser(refreshedUser)
-      } else {
-        startCreateUser()
+      if (!refreshedUser) {
+        selectedUserId.value = null
       }
     }
+
+    if (selectedRoleId.value) {
+      const refreshedRole = response.roles.find((role) => role.id === selectedRoleId.value)
+      refreshedRole ? syncFormWithRole(refreshedRole) : startCreateRole()
+    }
+
+    if (selectedPermissionId.value) {
+      const refreshedPermission = response.permissions.find((permission) => permission.id === selectedPermissionId.value)
+      refreshedPermission ? syncFormWithPermission(refreshedPermission) : startCreatePermission()
+    }
+
+    syncUserWizardFromRoute()
   } catch (error) {
     loadError.value = error instanceof Error ? error.message : 'No se pudo cargar el modulo de usuarios'
+    pushToast('Modulo usuarios', loadError.value, 'danger')
   } finally {
     isLoading.value = false
   }
@@ -241,7 +692,7 @@ async function saveUser(): Promise<void> {
       area: form.area.trim(),
       is_active: form.is_active,
       role_ids: [...form.role_ids],
-      permission_ids: [...form.permission_ids],
+      permission_ids: [...directPermissionIds.value],
     }
 
     const result =
@@ -249,16 +700,21 @@ async function saveUser(): Promise<void> {
         ? await createUser(payload)
         : await updateUser(selectedUserId.value ?? '', payload)
 
+    userFeedbackTone.value = 'success'
     userFeedback.value = result.message
+    pushToast(userViewMode.value === 'create' ? 'Usuario creado' : 'Usuario actualizado', result.message, 'success')
     await loadModuleData()
 
     if (result.user) {
       selectedUserId.value = result.user.id
       formMode.value = 'edit'
       syncFormWithUser(result.user)
+      void router.push('/usuarios/usuarios')
     }
   } catch (error) {
+    userFeedbackTone.value = 'danger'
     userFeedback.value = error instanceof Error ? error.message : 'No se pudo guardar el usuario'
+    pushToast('Error al guardar', userFeedback.value, 'danger')
   } finally {
     isSavingUser.value = false
   }
@@ -269,43 +725,115 @@ async function toggleUserActive(user: AccessUser): Promise<void> {
 
   try {
     const result = await updateUserStatus(user.id, !user.is_active)
+    userFeedbackTone.value = 'success'
     userFeedback.value = result.message
+    pushToast('Estado actualizado', result.message, 'success')
     await loadModuleData()
-
-    if (selectedUserId.value === user.id && result.user) {
-      syncFormWithUser(result.user)
-    }
   } catch (error) {
+    userFeedbackTone.value = 'danger'
     userFeedback.value = error instanceof Error ? error.message : 'No se pudo actualizar el estado'
+    pushToast('Error de estado', userFeedback.value, 'danger')
   }
 }
 
-async function saveRolePermissionMatrix(): Promise<void> {
-  if (!selectedRoleId.value) {
+async function saveRole(): Promise<void> {
+  isSavingRole.value = true
+  roleFeedback.value = ''
+  roleValidationAttempted.value = true
+
+  if (hasRoleFormErrors()) {
+    roleFeedbackTone.value = 'warning'
+    roleFeedback.value = 'Completa codigo y nombre antes de guardar el rol.'
+    isSavingRole.value = false
     return
   }
 
-  isSavingRole.value = true
-  roleFeedback.value = ''
-
   try {
-    const result = await updateRolePermissions(selectedRoleId.value, {
-      permission_ids: rolePermissionDraft.value,
-    })
+    const payload: RolePayload = {
+      codigo: roleForm.codigo.trim(),
+      nombre: roleForm.nombre.trim(),
+      descripcion: roleForm.descripcion.trim(),
+      estado: roleForm.estado,
+      permission_ids: [...roleForm.permission_ids],
+      user_ids: [...roleForm.user_ids],
+    }
 
+    const result =
+      roleFormMode.value === 'create'
+        ? await createRole(payload)
+        : await updateRole(selectedRoleId.value ?? '', payload)
+
+    roleFeedbackTone.value = 'success'
     roleFeedback.value = result.message
+    pushToast(roleFormMode.value === 'create' ? 'Rol creado' : 'Rol actualizado', result.message, 'success')
     await loadModuleData()
+
+    if (result.role) {
+      selectedRoleId.value = result.role.id
+      roleFormMode.value = 'edit'
+      syncFormWithRole(result.role)
+    }
   } catch (error) {
-    roleFeedback.value = error instanceof Error ? error.message : 'No se pudieron guardar los permisos del rol'
+    roleFeedbackTone.value = 'danger'
+    roleFeedback.value = error instanceof Error ? error.message : 'No se pudo guardar el rol'
+    pushToast('Error al guardar rol', roleFeedback.value, 'danger')
   } finally {
     isSavingRole.value = false
   }
 }
 
+async function savePermission(): Promise<void> {
+  isSavingPermission.value = true
+  permissionFeedback.value = ''
+  permissionValidationAttempted.value = true
+
+  if (hasPermissionFormErrors()) {
+    permissionFeedbackTone.value = 'warning'
+    permissionFeedback.value = 'Completa codigo, nombre, modulo y accion antes de guardar el permiso.'
+    isSavingPermission.value = false
+    return
+  }
+
+  try {
+    const payload: PermissionPayload = {
+      codigo: permissionForm.codigo.trim(),
+      nombre: permissionForm.nombre.trim(),
+      modulo: permissionForm.modulo.trim(),
+      accion: permissionForm.accion.trim(),
+      descripcion: permissionForm.descripcion.trim(),
+      estado: permissionForm.estado,
+      role_ids: [...permissionForm.role_ids],
+      user_ids: [...permissionForm.user_ids],
+    }
+
+    const result =
+      permissionFormMode.value === 'create'
+        ? await createPermission(payload)
+        : await updatePermission(selectedPermissionId.value ?? '', payload)
+
+    permissionFeedbackTone.value = 'success'
+    permissionFeedback.value = result.message
+    pushToast(permissionFormMode.value === 'create' ? 'Permiso creado' : 'Permiso actualizado', result.message, 'success')
+    await loadModuleData()
+
+    if (result.permission) {
+      selectedPermissionId.value = result.permission.id
+      permissionFormMode.value = 'edit'
+      syncFormWithPermission(result.permission)
+    }
+  } catch (error) {
+    permissionFeedbackTone.value = 'danger'
+    permissionFeedback.value = error instanceof Error ? error.message : 'No se pudo guardar el permiso'
+    pushToast('Error al guardar permiso', permissionFeedback.value, 'danger')
+  } finally {
+    isSavingPermission.value = false
+  }
+}
+
 watch(
-  selectedRole,
-  (role) => {
-    rolePermissionDraft.value = role ? [...role.permission_ids] : []
+  () => route.fullPath,
+  () => {
+    syncUserWizardFromRoute()
   },
   { immediate: true },
 )
@@ -317,7 +845,8 @@ onMounted(() => {
 
   mobileBreakpoint.addEventListener('change', handleViewportChange)
   void loadModuleData()
-  startCreateUser()
+  startCreateRole()
+  startCreatePermission()
 })
 
 onBeforeUnmount(() => {
@@ -332,6 +861,29 @@ onBeforeUnmount(() => {
     </template>
 
     <section class="users-page" aria-label="Gestion de usuarios y accesos">
+      <div v-if="toastQueue.length" class="toast-container" aria-live="polite" aria-atomic="true">
+        <article
+          v-for="toast in toastQueue"
+          :key="toast.id"
+          class="toast"
+          :class="`toast--${toast.tone}`"
+          role="status"
+        >
+          <div class="toast__icon" aria-hidden="true">
+            <span v-if="toast.tone === 'success'">✓</span>
+            <span v-else-if="toast.tone === 'warning'">!</span>
+            <span v-else-if="toast.tone === 'danger'">×</span>
+            <span v-else>i</span>
+          </div>
+          <div class="toast__content">
+            <div class="toast__title">{{ toast.title }}</div>
+            <div class="toast__message">{{ toast.message }}</div>
+          </div>
+          <button type="button" class="toast__close" aria-label="Cerrar notificacion" @click="dismissToast(toast.id)">×</button>
+          <span class="toast__progress" aria-hidden="true" />
+        </article>
+      </div>
+
       <div class="tracking-mobile-bar">
         <button
           type="button"
@@ -346,49 +898,46 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
-      <header class="card card--acrylic tracking-card users-hero-card">
-        <div class="card__body users-hero">
-          <div class="users-hero-copy">
-            <p class="eyebrow glow-text--strong">SEGURIDAD Y ACCESOS</p>
-            <h1 class="tracking-title">
-              GESTION DE USUARIOS
-              <span class="tracking-title-accent" />
-            </h1>
-            <p class="users-hero-text">
-              Administra usuarios, asigna roles, define permisos por rol y aplica excepciones puntuales por usuario.
-            </p>
-          </div>
+      <header class="users-hero">
+        <div class="users-hero-copy">
+          <TrackingPageHeader />
+          <p class="users-hero-text">{{ heroDescription }}</p>
         </div>
       </header>
 
-      <nav class="card card--acrylic tracking-card users-subnav-card" aria-label="Submodulos de seguridad">
-        <div class="card__body users-subnav">
-          <button
-            type="button"
-            class="users-subnav-item"
-            :class="{ 'users-subnav-item--active': activeSection === 'usuarios' }"
-            @click="activeSection = 'usuarios'"
-          >
-            Usuarios
-          </button>
-          <button
-            type="button"
-            class="users-subnav-item"
-            :class="{ 'users-subnav-item--active': activeSection === 'roles' }"
-            @click="activeSection = 'roles'"
-          >
-            Roles
-          </button>
-          <button
-            type="button"
-            class="users-subnav-item"
-            :class="{ 'users-subnav-item--active': activeSection === 'permisos' }"
-            @click="activeSection = 'permisos'"
-          >
-            Permisos
-          </button>
-        </div>
-      </nav>
+      <div
+        v-if="!(activeSection === 'usuarios' && isUserWizard)"
+        class="users-summary-grid"
+        :class="{ 'users-summary-grid--compact': activeSection === 'usuarios' && !isUserWizard }"
+      >
+        <article class="card card--acrylic tracking-card users-summary-card">
+          <div class="card__body">
+            <p class="users-summary-value">{{ summary.users }}</p>
+            <p class="users-summary-label">Usuarios registrados</p>
+          </div>
+        </article>
+
+        <article class="card card--acrylic tracking-card users-summary-card">
+          <div class="card__body">
+            <p class="users-summary-value">{{ summary.activeUsers }}</p>
+            <p class="users-summary-label">Usuarios activos</p>
+          </div>
+        </article>
+
+        <article class="card card--acrylic tracking-card users-summary-card">
+          <div class="card__body">
+            <p class="users-summary-value">{{ summary.roles }}</p>
+            <p class="users-summary-label">Roles configurados</p>
+          </div>
+        </article>
+
+        <article class="card card--acrylic tracking-card users-summary-card">
+          <div class="card__body">
+            <p class="users-summary-value">{{ summary.permissions }}</p>
+            <p class="users-summary-label">Permisos disponibles</p>
+          </div>
+        </article>
+      </div>
 
       <section v-if="loadError" class="card card--acrylic tracking-card">
         <div class="card__body">
@@ -403,352 +952,87 @@ onBeforeUnmount(() => {
       </section>
 
       <template v-else-if="activeSection === 'usuarios'">
-        <div class="users-summary-grid">
-          <article class="card card--acrylic tracking-card users-summary-card">
-            <div class="card__body">
-              <p class="users-summary-value">{{ summary.users }}</p>
-              <p class="users-summary-label">Usuarios registrados</p>
-            </div>
-          </article>
-
-          <article class="card card--acrylic tracking-card users-summary-card">
-            <div class="card__body">
-              <p class="users-summary-value">{{ summary.activeUsers }}</p>
-              <p class="users-summary-label">Usuarios activos</p>
-            </div>
-          </article>
-
-          <article class="card card--acrylic tracking-card users-summary-card">
-            <div class="card__body">
-              <p class="users-summary-value">{{ summary.roles }}</p>
-              <p class="users-summary-label">Roles configurados</p>
-            </div>
-          </article>
-
-          <article class="card card--acrylic tracking-card users-summary-card">
-            <div class="card__body">
-              <p class="users-summary-value">{{ summary.permissions }}</p>
-              <p class="users-summary-label">Permisos disponibles</p>
-            </div>
-          </article>
-        </div>
-
-        <div class="users-management-grid">
-          <section class="card card--acrylic tracking-card users-table-card" aria-label="Listado de usuarios">
-            <header class="card__header tracking-card-header--space-between">
-              <div>
-                <p class="card__header-title tracking-card-title">USUARIOS</p>
-                <p class="users-card-copy">Consulta, activa o edita accesos individuales.</p>
-              </div>
-
-              <button type="button" class="btn btn--primary btn--sm" @click="startCreateUser">
-                Nuevo usuario
-              </button>
-            </header>
-
-            <div class="card__body users-table-body">
-              <label class="tracking-field">
-                <span class="input-label">Buscar usuario</span>
-                <input v-model="searchTerm" class="input input--sm" type="text" placeholder="Usuario, nombre, correo o area" />
-              </label>
-
-              <div class="tracking-table-wrap users-table-wrap">
-                <table class="table table--compact table--hoverable tracking-table tracking-table--borderless users-table">
-                  <thead>
-                    <tr>
-                      <th>Usuario</th>
-                      <th>Nombre</th>
-                      <th>Correo</th>
-                      <th>Area</th>
-                      <th>Roles</th>
-                      <th>Accesos</th>
-                      <th>Estado</th>
-                      <th>Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      v-for="user in filteredUsers"
-                      :key="user.id"
-                      :class="{ 'users-table-row--selected': selectedUserId === user.id }"
-                      @click="selectUser(user)"
-                    >
-                      <td>{{ user.username }}</td>
-                      <td>{{ user.fullname || '-' }}</td>
-                      <td>{{ user.email || '-' }}</td>
-                      <td>{{ user.area || '-' }}</td>
-                      <td>{{ describeUserRoles(user) }}</td>
-                      <td>{{ describeEffectivePermissionCount(user) }}</td>
-                      <td>
-                        <span class="badge badge--sm" :class="user.is_active ? 'badge--success' : 'badge--danger'">
-                          {{ user.is_active ? 'Activo' : 'Inactivo' }}
-                        </span>
-                      </td>
-                      <td class="users-table-actions">
-                        <button type="button" class="btn btn--ghost btn--sm" @click.stop="selectUser(user)">Editar</button>
-                        <button type="button" class="btn btn--ghost btn--sm" @click.stop="toggleUserActive(user)">
-                          {{ user.is_active ? 'Desactivar' : 'Activar' }}
-                        </button>
-                      </td>
-                    </tr>
-                    <tr v-if="filteredUsers.length === 0">
-                      <td colspan="8" class="tracking-empty">No hay usuarios que coincidan con la busqueda.</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </section>
-
-          <section class="card card--acrylic tracking-card users-form-card" aria-label="Formulario de usuario">
-            <header class="card__header tracking-card-header--space-between">
-              <div>
-                <p class="card__header-title tracking-card-title">
-                  {{ formMode === 'create' ? 'NUEVO USUARIO' : 'EDITAR USUARIO' }}
-                </p>
-                <p class="users-card-copy">Asigna roles, permisos directos y estado operativo.</p>
-              </div>
-
-              <button type="button" class="btn btn--ghost btn--sm" @click="startCreateUser">
-                Limpiar
-              </button>
-            </header>
-
-            <div class="card__body users-form-body">
-              <div class="users-form-grid">
-                <label class="tracking-field">
-                  <span class="input-label">Username</span>
-                  <input v-model="form.username" class="input input--sm" type="text" placeholder="usuario.sigemo" />
-                </label>
-
-                <label class="tracking-field">
-                  <span class="input-label">{{ formMode === 'create' ? 'Contrasena' : 'Nueva contrasena' }}</span>
-                  <input
-                    v-model="form.password_hash"
-                    class="input input--sm"
-                    type="text"
-                    :placeholder="formMode === 'create' ? 'Si no ingresas, se usara el username' : 'Opcional para mantener la actual'"
-                  />
-                </label>
-
-                <label class="tracking-field">
-                  <span class="input-label">Nombres</span>
-                  <input v-model="form.name" class="input input--sm" type="text" placeholder="Fernando Jesus" />
-                </label>
-
-                <label class="tracking-field">
-                  <span class="input-label">Apellidos</span>
-                  <input v-model="form.last_name" class="input input--sm" type="text" placeholder="Serrano Garrido" />
-                </label>
-
-                <label class="tracking-field">
-                  <span class="input-label">Correo</span>
-                  <input v-model="form.email" class="input input--sm" type="email" placeholder="correo@liderman.com.pe" />
-                </label>
-
-                <label class="tracking-field">
-                  <span class="input-label">Area</span>
-                  <input v-model="form.area" class="input input--sm" type="text" placeholder="Operaciones, RRHH, SSO..." />
-                </label>
-              </div>
-
-              <label class="users-toggle">
-                <input v-model="form.is_active" type="checkbox" />
-                <span>Usuario activo</span>
-              </label>
-
-              <div class="users-access-grid">
-                <section class="users-access-panel">
-                  <div class="users-access-header">
-                    <p class="users-access-title">Roles asignados</p>
-                    <p class="users-access-copy">Un usuario puede heredar permisos desde uno o varios roles.</p>
-                  </div>
-
-                  <div class="users-chip-grid">
-                    <label v-for="role in catalog.roles" :key="role.id" class="users-chip">
-                      <input
-                        :checked="form.role_ids.includes(role.id)"
-                        type="checkbox"
-                        @change="toggleFormRole(role.id)"
-                      />
-                      <span>{{ role.nombre }}</span>
-                    </label>
-                  </div>
-                </section>
-
-                <section class="users-access-panel">
-                  <div class="users-access-header">
-                    <p class="users-access-title">Permisos directos por usuario</p>
-                    <p class="users-access-copy">Sirven para excepciones puntuales adicionales al rol.</p>
-                  </div>
-
-                  <div class="users-permission-groups">
-                    <section v-for="group in permissionsByModule" :key="group.moduleName" class="users-permission-group">
-                      <header class="users-permission-group-header">
-                        <p class="users-permission-group-title">{{ group.moduleName }}</p>
-                      </header>
-
-                      <div class="users-chip-grid">
-                        <label v-for="permission in group.permissions" :key="permission.id" class="users-chip">
-                          <input
-                            :checked="form.permission_ids.includes(permission.id)"
-                            type="checkbox"
-                            @change="toggleFormPermission(permission.id)"
-                          />
-                          <span>{{ permission.nombre }}</span>
-                        </label>
-                      </div>
-                    </section>
-                  </div>
-                </section>
-              </div>
-
-              <p v-if="userFeedback" class="users-feedback">{{ userFeedback }}</p>
-
-              <div class="users-form-actions">
-                <button type="button" class="btn btn--primary" :disabled="isSavingUser" @click="saveUser">
-                  {{ isSavingUser ? 'Guardando...' : formMode === 'create' ? 'Crear usuario' : 'Guardar cambios' }}
-                </button>
-              </div>
-            </div>
-          </section>
-        </div>
+        <UsersSubmodulePanel
+          :search-term="searchTerm"
+          :filtered-users="filteredUsers"
+          :selected-user-id="selectedUserId"
+          :selected-user="selectedUser"
+          :is-user-wizard="isUserWizard"
+          :wizard-title="wizardTitle"
+          :current-wizard-step-index="currentWizardStepIndex"
+          :user-wizard-steps="userWizardSteps"
+          :user-step="userStep"
+          :user-view-mode="userViewMode"
+          :form-mode="formMode"
+          :form="form"
+          :selected-form-roles="selectedFormRoles"
+          :filtered-roles="filteredRoles"
+          :inherited-permission-ids="inheritedPermissionIds"
+          :direct-permission-ids="directPermissionIds"
+          :effective-permission-ids-preview="effectivePermissionIdsPreview"
+          :available-direct-permissions-by-module="availableDirectPermissionsByModule"
+          :effective-permissions-by-module="effectivePermissionsByModule"
+          :user-feedback="userFeedback"
+          :user-feedback-tone="userFeedbackTone"
+          :user-validation-attempted="userValidationAttempted"
+          :user-form-errors="userFormErrors"
+          :is-saving-user="isSavingUser"
+          :wizard-primary-label="wizardPrimaryLabel"
+          :wizard-secondary-label="wizardSecondaryLabel"
+          :describe-user-roles="describeUserRoles"
+          :describe-effective-permission-count="describeEffectivePermissionCount"
+          @update:search-term="searchTerm = $event"
+          @create-user="beginCreateUser"
+          @edit-user="beginEditUser"
+          @open-user-detail="openUserDetail"
+          @toggle-user-active="toggleUserActive"
+          @cancel-user-wizard="cancelUserWizard"
+          @previous-wizard-step="goToPreviousWizardStep"
+          @primary-wizard-action="handleWizardPrimaryAction"
+          @goto-wizard-step="goToUserWizardStep"
+        />
       </template>
 
       <template v-else-if="activeSection === 'roles'">
-        <div class="users-role-layout">
-          <section class="card card--acrylic tracking-card users-role-list-card" aria-label="Listado de roles">
-            <header class="card__header">
-              <div>
-                <p class="card__header-title tracking-card-title">ROLES</p>
-                <p class="users-card-copy">Selecciona un rol para revisar y ajustar su matriz de permisos.</p>
-              </div>
-            </header>
-
-            <div class="card__body users-role-list">
-              <button
-                v-for="role in filteredRoles"
-                :key="role.id"
-                type="button"
-                class="users-role-item"
-                :class="{ 'users-role-item--active': selectedRoleId === role.id }"
-                @click="selectRole(role.id)"
-              >
-                <span class="users-role-item-name">{{ role.nombre }}</span>
-                <span class="users-role-item-code">{{ role.codigo }}</span>
-              </button>
-            </div>
-          </section>
-
-          <section class="card card--acrylic tracking-card users-role-card" aria-label="Permisos por rol">
-            <header class="card__header tracking-card-header--space-between">
-              <div>
-                <p class="card__header-title tracking-card-title">PERMISOS POR ROL</p>
-                <p class="users-card-copy">Ajusta la matriz base de permisos heredados por cada rol.</p>
-              </div>
-
-              <label class="tracking-field users-role-select">
-                <span class="input-label">Rol</span>
-                <select v-model="selectedRoleId" class="select select--sm">
-                  <option v-for="role in catalog.roles" :key="role.id" :value="role.id">{{ role.nombre }}</option>
-                </select>
-              </label>
-            </header>
-
-            <div class="card__body users-role-body">
-              <div v-if="selectedRole" class="users-role-summary">
-                <p class="users-role-name">{{ selectedRole.nombre }}</p>
-                <p class="users-role-copy">{{ selectedRole.descripcion || 'Sin descripcion registrada.' }}</p>
-              </div>
-
-              <div class="users-permission-groups">
-                <section v-for="group in permissionsByModule" :key="group.moduleName" class="users-permission-group">
-                  <header class="users-permission-group-header">
-                    <p class="users-permission-group-title">{{ group.moduleName }}</p>
-                  </header>
-
-                  <div class="users-chip-grid">
-                    <label v-for="permission in group.permissions" :key="permission.id" class="users-chip">
-                      <input
-                        :checked="rolePermissionDraft.includes(permission.id)"
-                        type="checkbox"
-                        @change="toggleRoleDraftPermission(permission.id)"
-                      />
-                      <span>{{ permission.nombre }}</span>
-                    </label>
-                  </div>
-                </section>
-              </div>
-
-              <p v-if="roleFeedback" class="users-feedback">{{ roleFeedback }}</p>
-
-              <div class="users-form-actions">
-                <button type="button" class="btn btn--primary" :disabled="isSavingRole || !selectedRoleId" @click="saveRolePermissionMatrix">
-                  {{ isSavingRole ? 'Guardando...' : 'Guardar permisos del rol' }}
-                </button>
-              </div>
-            </div>
-          </section>
-        </div>
+        <RolesSubmodulePanel
+          :role-search-term="roleSearchTerm"
+          :filtered-roles="filteredRoles"
+          :selected-role-id="selectedRoleId"
+          :role-form-mode="roleFormMode"
+          :role-form="roleForm"
+          :sorted-users="sortedUsers"
+          :permissions-by-module="permissionsByModule"
+          :role-feedback="roleFeedback"
+          :role-feedback-tone="roleFeedbackTone"
+          :role-validation-attempted="roleValidationAttempted"
+          :role-form-errors="roleFormErrors"
+          :is-saving-role="isSavingRole"
+          @update:role-search-term="roleSearchTerm = $event"
+          @select-role="selectRole"
+          @create-role="startCreateRole"
+          @save-role="saveRole"
+        />
       </template>
 
       <template v-else>
-        <section class="card card--acrylic tracking-card users-permissions-card" aria-label="Catalogo de permisos">
-          <header class="card__header tracking-card-header--space-between">
-            <div>
-              <p class="card__header-title tracking-card-title">PERMISOS</p>
-              <p class="users-card-copy">Vista general del catalogo de permisos disponible para el sistema.</p>
-            </div>
-
-            <label class="tracking-field users-role-select">
-              <span class="input-label">Buscar permiso</span>
-              <input
-                v-model="permissionSearchTerm"
-                class="input input--sm"
-                type="text"
-                placeholder="Codigo, nombre, accion o descripcion"
-              />
-            </label>
-          </header>
-
-          <div class="card__body users-role-body">
-            <div class="users-permission-groups">
-              <section v-for="group in filteredPermissionsByModule" :key="group.moduleName" class="users-permission-group">
-                <header class="users-permission-group-header">
-                  <p class="users-permission-group-title">{{ group.moduleName }}</p>
-                </header>
-
-                <div class="tracking-table-wrap">
-                  <table class="table table--compact tracking-table tracking-table--borderless users-permission-table">
-                    <thead>
-                      <tr>
-                        <th>Codigo</th>
-                        <th>Nombre</th>
-                        <th>Accion</th>
-                        <th>Estado</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="permission in group.permissions" :key="permission.id">
-                        <td>{{ permission.codigo }}</td>
-                        <td>{{ permission.nombre }}</td>
-                        <td>{{ permission.accion || '-' }}</td>
-                        <td>
-                          <span class="badge badge--sm" :class="permission.estado ? 'badge--success' : 'badge--danger'">
-                            {{ permission.estado ? 'Activo' : 'Inactivo' }}
-                          </span>
-                        </td>
-                      </tr>
-                      <tr v-if="group.permissions.length === 0">
-                        <td colspan="4" class="tracking-empty">Sin permisos en este modulo.</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            </div>
-          </div>
-        </section>
+        <PermissionsSubmodulePanel
+          :permission-search-term="permissionSearchTerm"
+          :filtered-permissions="filteredPermissions"
+          :filtered-roles="filteredRoles"
+          :sorted-users="sortedUsers"
+          :selected-permission-id="selectedPermissionId"
+          :permission-form-mode="permissionFormMode"
+          :permission-form="permissionForm"
+          :permission-feedback="permissionFeedback"
+          :permission-feedback-tone="permissionFeedbackTone"
+          :permission-validation-attempted="permissionValidationAttempted"
+          :permission-form-errors="permissionFormErrors"
+          :is-saving-permission="isSavingPermission"
+          @update:permission-search-term="permissionSearchTerm = $event"
+          @select-permission="selectPermission"
+          @create-permission="startCreatePermission"
+          @save-permission="savePermission"
+        />
       </template>
     </section>
   </AppShell>

@@ -77,32 +77,42 @@ def ensure_distinct_ids(values: Iterable[str]) -> list[str]:
     return result
 
 
+def build_distinct_lookup_candidates(values: Iterable[object]) -> list[object]:
+    candidates: list[object] = []
+    seen_strings: set[str] = set()
+
+    for raw_value in values:
+        value = str(raw_value).strip()
+        if not value or value in seen_strings:
+            continue
+
+        seen_strings.add(value)
+        candidates.append(value)
+
+        try:
+            candidates.append(ObjectId(value))
+        except (InvalidId, TypeError):
+            pass
+
+    return candidates
+
+
 def fetch_role_documents_by_ids(role_ids: Iterable[str]) -> list[dict]:
     roles_collection = get_roles_collection()
-    role_documents: list[dict] = []
+    candidates = build_distinct_lookup_candidates(role_ids)
+    if not candidates:
+        return []
 
-    for role_id in ensure_distinct_ids(role_ids):
-        for candidate in build_object_id_candidates(role_id):
-            role = roles_collection.find_one({"_id": candidate})
-            if role:
-                role_documents.append(role)
-                break
-
-    return role_documents
+    return list(roles_collection.find({"_id": {"$in": candidates}}))
 
 
 def fetch_permission_documents_by_ids(permission_ids: Iterable[str]) -> list[dict]:
     permissions_collection = get_permissions_collection()
-    permission_documents: list[dict] = []
+    candidates = build_distinct_lookup_candidates(permission_ids)
+    if not candidates:
+        return []
 
-    for permission_id in ensure_distinct_ids(permission_ids):
-        for candidate in build_object_id_candidates(permission_id):
-            permission = permissions_collection.find_one({"_id": candidate})
-            if permission:
-                permission_documents.append(permission)
-                break
-
-    return permission_documents
+    return list(permissions_collection.find({"_id": {"$in": candidates}}))
 
 
 def get_user_role_ids(user_id: object) -> list[str]:

@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from app.db import get_roles_collection, get_user_roles_collection, get_users_collection
 from app.schemas.auth import LoginRequest, LoginResponse, LoginUser
 from app.utils.access import build_display_name, build_object_id_candidates, normalize_active_state
+from app.utils.security import is_password_hash, verify_password, hash_password
 
 router = APIRouter(prefix="/api", tags=["auth"])
 
@@ -59,10 +60,17 @@ def login(payload: LoginRequest):
             content={"ok": False, "message": "Credenciales invalidas"},
         )
 
-    if str(user.get("password_hash", "")) != password_hash:
+    stored_password = str(user.get("password_hash", ""))
+    if not verify_password(password_hash, stored_password):
         return JSONResponse(
             status_code=401,
             content={"ok": False, "message": "Credenciales invalidas"},
+        )
+
+    if stored_password and not is_password_hash(stored_password):
+        get_users_collection().update_one(
+            {"_id": user.get("_id")},
+            {"$set": {"password_hash": hash_password(password_hash)}},
         )
 
     if not normalize_active_state(user):

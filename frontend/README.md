@@ -1,6 +1,8 @@
-# SIGEMO Frontend
+# MGA GADSO Frontend
 
-Frontend del proyecto SIGEMO construido con Vue 3, Vite y TypeScript.
+Frontend del sistema operativo `MGA GADSO` construido con Vue 3, Vite y TypeScript.
+
+Actualmente `SIGEMO` se presenta como un modulo dentro de la plataforma, junto con otros procesos como SUCAMEC y vacaciones.
 
 ## Requisitos
 

@@ -1,6 +1,8 @@
 import type {
   AccessCatalogResponse,
   MutationResponse,
+  PermissionPayload,
+  RolePayload,
   RolePermissionsPayload,
   UserPayload,
 } from '../types'
@@ -93,6 +95,66 @@ export async function updateRolePermissions(roleId: string, payload: RolePermiss
 
   if (!response.ok || !result.ok) {
     throw new Error(result.message || 'No se pudieron actualizar los permisos del rol')
+  }
+
+  return result
+}
+
+export async function createRole(payload: RolePayload): Promise<MutationResponse> {
+  const response = await fetch(buildApiUrl('/api/roles'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const result = await readJsonResponse<MutationResponse>(response)
+
+  if (!response.ok || !result.ok) {
+    throw new Error(result.message || 'No se pudo crear el rol')
+  }
+
+  return result
+}
+
+export async function updateRole(roleId: string, payload: RolePayload): Promise<MutationResponse> {
+  const response = await fetch(buildApiUrl(`/api/roles/${roleId}`), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const result = await readJsonResponse<MutationResponse>(response)
+
+  if (!response.ok || !result.ok) {
+    throw new Error(result.message || 'No se pudo actualizar el rol')
+  }
+
+  return result
+}
+
+export async function createPermission(payload: PermissionPayload): Promise<MutationResponse> {
+  const response = await fetch(buildApiUrl('/api/permissions'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const result = await readJsonResponse<MutationResponse>(response)
+
+  if (!response.ok || !result.ok) {
+    throw new Error(result.message || 'No se pudo crear el permiso')
+  }
+
+  return result
+}
+
+export async function updatePermission(permissionId: string, payload: PermissionPayload): Promise<MutationResponse> {
+  const response = await fetch(buildApiUrl(`/api/permissions/${permissionId}`), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const result = await readJsonResponse<MutationResponse>(response)
+
+  if (!response.ok || !result.ok) {
+    throw new Error(result.message || 'No se pudo actualizar el permiso')
   }
 
   return result

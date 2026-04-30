@@ -38,20 +38,48 @@ const emit = defineEmits<{
   (event: 'close'): void
 }>()
 
-const quickActions: SidebarItem[] = [
+const sucamecItems: SidebarItem[] = [
   {
-    id: 'users',
-    label: 'Usuarios',
-    to: '/usuarios',
-    iconPath: 'M16 21V19C16 17.3 14.7 16 13 16H7C5.3 16 4 17.3 4 19V21 M19 21V19C19 17.55 18.2 16.29 17 15.62 M10 12C11.93 12 13.5 10.43 13.5 8.5C13.5 6.57 11.93 5 10 5C8.07 5 6.5 6.57 6.5 8.5C6.5 10.43 8.07 12 10 12 M17 11C18.38 11 19.5 9.88 19.5 8.5C19.5 7.12 18.38 6 17 6',
+    id: 'sucamec-dashboard',
+    label: 'Panel',
+    to: '/sucamec',
+    iconPath: 'M4 13H9V20H4V13 Z M10.5 4H19.5V11H10.5V4 Z M10.5 13H19.5V20H10.5V13 Z M4 4H9V11H4V4 Z',
   },
+]
+
+const sigemoItems: SidebarItem[] = [
   {
     id: 'emos',
     label: 'EMOs',
     to: '/inicio',
-    iconPath: 'M7 5H17V19H7V5 Z M10 3V7 M14 3V7 M10 12H14 M10 16H14',
+    iconPath: 'M10 4.75H14V10H19.25V14H14V19.25H10V14H4.75V10H10V4.75Z',
   },
 ]
+
+const usersItems: SidebarItem[] = [
+  {
+    id: 'users-list',
+    label: 'Usuarios',
+    to: '/usuarios/usuarios',
+    iconPath: 'M16 21V19C16 17.3 14.7 16 13 16H7C5.3 16 4 17.3 4 19V21 M19 21V19C19 17.55 18.2 16.29 17 15.62 M10 12C11.93 12 13.5 10.43 13.5 8.5C13.5 6.57 11.93 5 10 5C8.07 5 6.5 6.57 6.5 8.5C6.5 10.43 8.07 12 10 12 M17 11C18.38 11 19.5 9.88 19.5 8.5C19.5 7.12 18.38 6 17 6',
+  },
+  {
+    id: 'users-roles',
+    label: 'Roles',
+    to: '/usuarios/roles',
+    iconPath: 'M12 14C14.7614 14 17 11.7614 17 9C17 6.23858 14.7614 4 12 4C9.23858 4 7 6.23858 7 9C7 11.7614 9.23858 14 12 14Z M4 20C4.8 17.6 7.1 16 9.8 16H14.2C16.9 16 19.2 17.6 20 20 M12 1.5V3.5 M4.9 4.9L6.3 6.3 M19.1 4.9L17.7 6.3',
+  },
+  {
+    id: 'users-permissions',
+    label: 'Permisos',
+    to: '/usuarios/permisos',
+    iconPath: 'M16 21V19C16 17.3 14.7 16 13 16H7C5.3 16 4 17.3 4 19V21 M19 21V19C19 17.55 18.2 16.29 17 15.62 M10 12C11.93 12 13.5 10.43 13.5 8.5C13.5 6.57 11.93 5 10 5C8.07 5 6.5 6.57 6.5 8.5C6.5 10.43 8.07 12 10 12 M17 11C18.38 11 19.5 9.88 19.5 8.5C19.5 7.12 18.38 6 17 6',
+  },
+]
+
+const isSucamecExpanded = ref(false)
+const isSigemoExpanded = ref(false)
+const isUsersExpanded = ref(false)
 
 const logoutAction: SidebarItem = {
   id: 'logout',
@@ -65,22 +93,40 @@ const userSession = computed<UserSession>(() => {
   const raw = sessionStorage.getItem('sigemo-user')
 
   if (!raw) {
-    return { username: 'usuario', fullname: 'Usuario SIGEMO' }
+    return { username: 'usuario', fullname: 'Usuario MGA GADSO' }
   }
 
   try {
     return JSON.parse(raw) as UserSession
   } catch {
-    return { username: 'usuario', fullname: 'Usuario SIGEMO' }
+    return { username: 'usuario', fullname: 'Usuario MGA GADSO' }
   }
 })
 
-const mainMenu = computed(() =>
-  quickActions.map((item) => ({
+const sigemoMenu = computed(() =>
+  sigemoItems.map((item) => ({
     ...item,
     active: Boolean(item.to && route.path.startsWith(item.to)),
   })),
 )
+
+const sucamecMenu = computed(() =>
+  sucamecItems.map((item) => ({
+    ...item,
+    active: Boolean(item.to && route.path.startsWith(item.to)),
+  })),
+)
+
+const usersMenu = computed(() =>
+  usersItems.map((item) => ({
+    ...item,
+    active: Boolean(item.to && route.path.startsWith(item.to)),
+  })),
+)
+
+const isSucamecActive = computed(() => sucamecMenu.value.some((item) => item.active))
+const isSigemoActive = computed(() => sigemoMenu.value.some((item) => item.active))
+const isUsersActive = computed(() => usersMenu.value.some((item) => item.active))
 
 const userInitials = computed(() => {
   const firstName = userSession.value.name?.trim().split(/\s+/).find(Boolean)?.charAt(0).toUpperCase()
@@ -117,13 +163,25 @@ function onSelectItem(item: { to?: string; action?: 'logout' }): void {
     return
   }
 
-  if (!item.to || item.to === '/inicio' || item.to === route.path) {
+  if (!item.to || item.to === route.path) {
     emit('close')
     return
   }
 
   emit('close')
   void router.push(item.to)
+}
+
+function toggleSigemoModule(): void {
+  isSigemoExpanded.value = !isSigemoExpanded.value
+}
+
+function toggleSucamecModule(): void {
+  isSucamecExpanded.value = !isSucamecExpanded.value
+}
+
+function toggleUsersModule(): void {
+  isUsersExpanded.value = !isUsersExpanded.value
 }
 
 function applyTheme(selectedTheme: ThemeName): void {
@@ -169,7 +227,7 @@ watch(theme, (selectedTheme) => {
           <p class="sidebar__title sigemo-sidebar-logo-wrap">
             <AppBrandLogo :variant="logoVariant" class="sigemo-sidebar-logo" />
           </p>
-          <p class="glow-text--strong sigemo-sidebar-system-name">SIGEMO</p>
+          <p class="glow-text--strong sigemo-sidebar-system-name">MGA GADSO</p>
         </div>
       </div>
 
@@ -188,7 +246,101 @@ watch(theme, (selectedTheme) => {
     <section class="section-header section-header--flush sigemo-sidebar-section">
       <p class="section-header__title">Modulos</p>
     </section>
-    <AppSidebarMenu :items="mainMenu" @select="onSelectItem" />
+    <section class="sigemo-module-group" aria-label="Modulo Usuarios">
+      <button
+        type="button"
+        class="nav-item sigemo-module-trigger"
+        :class="{ 'nav-item--active': isUsersActive }"
+        :aria-expanded="isUsersExpanded"
+        @click="toggleUsersModule"
+      >
+        <span class="nav-item__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" class="sigemo-nav-icon" aria-hidden="true">
+            <path
+              d="M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z M5 20C5 17.2386 8.13401 15 12 15C15.866 15 19 17.2386 19 20"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </span>
+        <span class="sigemo-module-trigger-label">USUARIOS</span>
+        <span class="sigemo-module-trigger-chevron" :data-expanded="isUsersExpanded" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none">
+            <path d="M4 6L8 10L12 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
+      </button>
+
+      <div v-show="isUsersExpanded" class="sigemo-module-children">
+        <AppSidebarMenu :items="usersMenu" @select="onSelectItem" />
+      </div>
+    </section>
+
+    <section class="sigemo-module-group" aria-label="Modulo SUCAMEC">
+      <button
+        type="button"
+        class="nav-item sigemo-module-trigger"
+        :class="{ 'nav-item--active': isSucamecActive }"
+        :aria-expanded="isSucamecExpanded"
+        @click="toggleSucamecModule"
+      >
+        <span class="nav-item__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" class="sigemo-nav-icon" aria-hidden="true">
+            <path
+              d="M12 3L19 6V11C19 15.97 15.82 20.46 12 21C8.18 20.46 5 15.97 5 11V6L12 3Z"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </span>
+        <span class="sigemo-module-trigger-label">SUCAMEC</span>
+        <span class="sigemo-module-trigger-chevron" :data-expanded="isSucamecExpanded" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none">
+            <path d="M4 6L8 10L12 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
+      </button>
+
+      <div v-show="isSucamecExpanded" class="sigemo-module-children">
+        <AppSidebarMenu :items="sucamecMenu" @select="onSelectItem" />
+      </div>
+    </section>
+
+    <section class="sigemo-module-group" aria-label="Modulo SIGEMO">
+      <button
+        type="button"
+        class="nav-item sigemo-module-trigger"
+        :class="{ 'nav-item--active': isSigemoActive }"
+        :aria-expanded="isSigemoExpanded"
+        @click="toggleSigemoModule"
+      >
+        <span class="nav-item__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" class="sigemo-nav-icon" aria-hidden="true">
+            <path
+              d="M10 4.75H14V10H19.25V14H14V19.25H10V14H4.75V10H10V4.75Z"
+              stroke="currentColor"
+              stroke-width="1.9"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </span>
+        <span class="sigemo-module-trigger-label">SIGEMO</span>
+        <span class="sigemo-module-trigger-chevron" :data-expanded="isSigemoExpanded" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none">
+            <path d="M4 6L8 10L12 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
+      </button>
+
+      <div v-show="isSigemoExpanded" class="sigemo-module-children">
+        <AppSidebarMenu :items="sigemoMenu" @select="onSelectItem" />
+      </div>
+    </section>
 
     <div class="sigemo-sidebar-spacer" />
 
@@ -198,7 +350,7 @@ watch(theme, (selectedTheme) => {
           <span class="avatar__initials">{{ userInitials }}</span>
         </span>
         <span class="sigemo-sidebar-user-meta">
-          <span class="sigemo-sidebar-user-name">{{ userSession.fullname || 'Usuario SIGEMO' }}</span>
+          <span class="sigemo-sidebar-user-name">{{ userSession.fullname || 'Usuario MGA GADSO' }}</span>
           <span class="glow-text--strong sigemo-sidebar-user-role">{{ userRoleLabel }}</span>
         </span>
         <button

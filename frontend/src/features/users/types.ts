@@ -6,6 +6,8 @@ export interface AccessPermission {
   accion: string
   descripcion: string
   estado: boolean
+  role_ids: string[]
+  user_ids: string[]
 }
 
 export interface AccessRole {
@@ -15,6 +17,7 @@ export interface AccessRole {
   descripcion: string
   estado: boolean
   permission_ids: string[]
+  user_ids: string[]
 }
 
 export interface AccessUser {
@@ -59,9 +62,30 @@ export interface RolePermissionsPayload {
   permission_ids: string[]
 }
 
+export interface RolePayload {
+  codigo: string
+  nombre: string
+  descripcion: string
+  estado: boolean
+  permission_ids: string[]
+  user_ids: string[]
+}
+
+export interface PermissionPayload {
+  codigo: string
+  nombre: string
+  modulo: string
+  accion: string
+  descripcion: string
+  estado: boolean
+  role_ids: string[]
+  user_ids: string[]
+}
+
 export interface MutationResponse {
   ok: boolean
   message: string
   user?: AccessUser
   role?: AccessRole
+  permission?: AccessPermission
 }

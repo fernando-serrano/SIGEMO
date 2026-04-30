@@ -154,8 +154,17 @@
   font-weight: var(--fa-font-weight-bold);
 }
 
+.auth-hero-module-name {
+  margin: 12px 0 0;
+  font-size: 0.82rem;
+  font-weight: var(--fa-font-weight-semibold);
+  letter-spacing: var(--fa-letter-spacing-caps);
+  text-transform: uppercase;
+  color: var(--fa-color-accent);
+}
+
 .auth-hero-subtitle {
-  margin: 26px 0 0;
+  margin: 18px 0 0;
   max-width: 370px;
   line-height: 1.55;
   font-size: 1.08rem;

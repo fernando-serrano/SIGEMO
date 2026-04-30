@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pymongo import MongoClient
+from pymongo.collection import Collection
 
 from .config import settings
 
@@ -40,6 +41,22 @@ def get_role_permissions_collection():
 
 def get_user_permissions_collection():
     return get_db()[settings.user_permissions_collection]
+
+
+def _ensure_relation_indexes(collection: Collection, field_name: str) -> None:
+    collection.create_index(field_name)
+
+
+def ensure_indexes() -> None:
+    get_users_collection().create_index("username", unique=True)
+    _ensure_relation_indexes(get_user_roles_collection(), "user_id")
+    _ensure_relation_indexes(get_user_roles_collection(), "role_id")
+    _ensure_relation_indexes(get_user_permissions_collection(), "user_id")
+    _ensure_relation_indexes(get_user_permissions_collection(), "permission_id")
+    _ensure_relation_indexes(get_role_permissions_collection(), "role_id")
+    _ensure_relation_indexes(get_role_permissions_collection(), "permission_id")
+    get_roles_collection().create_index("codigo")
+    get_permissions_collection().create_index("codigo")
 
 
 def ping() -> None:

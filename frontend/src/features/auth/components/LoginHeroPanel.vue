@@ -17,12 +17,13 @@ const logoVariant = computed<'dark' | 'light'>(() =>
       <div class="auth-hero-copy">
         <h1 class="auth-hero-title">
           <span class="auth-hero-title-brand" aria-label="Liderman">
-          <AppBrandLogo :variant="logoVariant" />
+            <AppBrandLogo :variant="logoVariant" />
           </span>
-          <span class="auth-hero-title-text">SIGEMO</span>
+          <span class="auth-hero-title-text">MGA GADSO</span>
         </h1>
+        <p class="auth-hero-module-name">Modulo SIGEMO</p>
         <p class="auth-hero-subtitle">
-          Sistema de Gestion de Examenes Medicos Ocupacionales. v0.1
+          SIGEMO es actualmente un modulo de MGA GADSO. La plataforma tambien integrara procesos operativos como SUCAMEC y vacaciones.
         </p>
       </div>
     </div>
