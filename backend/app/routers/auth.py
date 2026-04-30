@@ -5,7 +5,7 @@ from pymongo.collection import Collection
 from app.db import get_roles_collection_dep, get_user_roles_collection_dep, get_users_collection_dep
 from app.exceptions import AppException
 from app.schemas.auth import LoginRequest, LoginResponse, LoginUser
-from app.utils.access import build_display_name, build_object_id_candidates, normalize_active_state
+from app.utils.access import build_display_name, build_object_id_candidates, is_relation_active, normalize_active_state
 from app.utils.security import is_password_hash, verify_password, hash_password
 
 router = APIRouter(prefix="/api", tags=["auth"])
@@ -18,7 +18,8 @@ def resolve_user_role(user_id: object, user_roles_collection: Collection, roles_
     relation = None
 
     for candidate in build_object_id_candidates(user_id):
-        relation = user_roles_collection.find_one({"user_id": candidate})
+        relations = list(user_roles_collection.find({"user_id": candidate}))
+        relation = next((item for item in relations if is_relation_active(item)), None)
         if relation:
             break
 

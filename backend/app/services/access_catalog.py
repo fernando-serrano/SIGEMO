@@ -8,7 +8,7 @@ from bson import ObjectId
 from bson.errors import InvalidId
 
 from app.schemas.users import AccessCatalogResponse, PermissionSummary, RoleSummary, UserSummary
-from app.utils.access import build_display_name, ensure_distinct_ids, normalize_active_state
+from app.utils.access import build_display_name, ensure_distinct_ids, is_relation_active, normalize_active_state
 
 
 def _build_lookup_candidates(values: Iterable[object]) -> list[object]:
@@ -38,6 +38,9 @@ def _group_relations_by_key(documents: Iterable[dict], key_name: str, value_name
     grouped: dict[str, list[str]] = defaultdict(list)
 
     for document in documents:
+        if not is_relation_active(document):
+            continue
+
         key = document.get(key_name)
         value = document.get(value_name)
 

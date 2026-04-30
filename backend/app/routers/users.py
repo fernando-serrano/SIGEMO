@@ -44,31 +44,72 @@ from app.utils.serializers import serialize_permission, serialize_role, serializ
 router = APIRouter(prefix="/api", tags=["users"])
 
 
+def sync_relation_records(
+    collection: Collection,
+    *,
+    owner_field: str,
+    owner_id: str,
+    target_field: str,
+    target_ids: list[str],
+) -> None:
+    owner_candidates = build_object_id_candidates(owner_id)
+    normalized_target_ids = ensure_distinct_ids(target_ids)
+    active_target_candidates = {
+        target_id: build_object_id_candidates(target_id)
+        for target_id in normalized_target_ids
+    }
+
+    collection.update_many(
+        {owner_field: {"$in": owner_candidates}},
+        {"$set": {"estado": False}},
+    )
+
+    for target_id, target_candidates in active_target_candidates.items():
+        existing_relation = collection.find_one(
+            {
+                owner_field: {"$in": owner_candidates},
+                target_field: {"$in": target_candidates},
+            }
+        )
+
+        if existing_relation:
+            collection.update_one(
+                {"_id": existing_relation["_id"]},
+                {"$set": {"estado": True, owner_field: owner_id, target_field: target_id}},
+            )
+            continue
+
+        collection.insert_one({owner_field: owner_id, target_field: target_id, "estado": True})
+
+
 def replace_user_roles(user_id: str, role_ids: list[str], user_roles_collection: Collection) -> None:
-    normalized_role_ids = ensure_distinct_ids(role_ids)
-
-    user_roles_collection.delete_many({"user_id": {"$in": build_object_id_candidates(user_id)}})
-
-    for role_id in normalized_role_ids:
-        user_roles_collection.insert_one({"user_id": user_id, "role_id": role_id})
+    sync_relation_records(
+        user_roles_collection,
+        owner_field="user_id",
+        owner_id=user_id,
+        target_field="role_id",
+        target_ids=role_ids,
+    )
 
 
 def replace_role_users(role_id: str, user_ids: list[str], user_roles_collection: Collection) -> None:
-    normalized_user_ids = ensure_distinct_ids(user_ids)
-
-    user_roles_collection.delete_many({"role_id": {"$in": build_object_id_candidates(role_id)}})
-
-    for user_id in normalized_user_ids:
-        user_roles_collection.insert_one({"user_id": user_id, "role_id": role_id})
+    sync_relation_records(
+        user_roles_collection,
+        owner_field="role_id",
+        owner_id=role_id,
+        target_field="user_id",
+        target_ids=user_ids,
+    )
 
 
 def replace_user_permissions(user_id: str, permission_ids: list[str], user_permissions_collection: Collection) -> None:
-    normalized_permission_ids = ensure_distinct_ids(permission_ids)
-
-    user_permissions_collection.delete_many({"user_id": {"$in": build_object_id_candidates(user_id)}})
-
-    for permission_id in normalized_permission_ids:
-        user_permissions_collection.insert_one({"user_id": user_id, "permission_id": permission_id})
+    sync_relation_records(
+        user_permissions_collection,
+        owner_field="user_id",
+        owner_id=user_id,
+        target_field="permission_id",
+        target_ids=permission_ids,
+    )
 
 
 def replace_role_permissions(role_id: str, permission_ids: list[str], role_permissions_collection: Collection) -> None:
@@ -90,12 +131,13 @@ def replace_permission_roles(permission_id: str, role_ids: list[str], role_permi
 
 
 def replace_permission_users(permission_id: str, user_ids: list[str], user_permissions_collection: Collection) -> None:
-    normalized_user_ids = ensure_distinct_ids(user_ids)
-
-    user_permissions_collection.delete_many({"permission_id": {"$in": build_object_id_candidates(permission_id)}})
-
-    for user_id in normalized_user_ids:
-        user_permissions_collection.insert_one({"user_id": user_id, "permission_id": permission_id})
+    sync_relation_records(
+        user_permissions_collection,
+        owner_field="permission_id",
+        owner_id=permission_id,
+        target_field="user_id",
+        target_ids=user_ids,
+    )
 
 
 def validate_role_ids(role_ids: list[str], roles_collection: Collection) -> list[str]:

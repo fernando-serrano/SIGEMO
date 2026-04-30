@@ -55,6 +55,10 @@ def normalize_active_state(document: dict, *, default: bool = True) -> bool:
     return default
 
 
+def is_relation_active(document: dict) -> bool:
+    return normalize_active_state(document, default=True)
+
+
 def ensure_distinct_ids(values: Iterable[str]) -> list[str]:
     seen: set[str] = set()
     result: list[str] = []
@@ -112,7 +116,11 @@ def get_user_role_ids(user_id: object, user_roles_collection: Collection) -> lis
     for candidate in build_object_id_candidates(user_id):
         relations = list(user_roles_collection.find({"user_id": candidate}))
         if relations:
-            role_ids.extend(str(relation.get("role_id")) for relation in relations if relation.get("role_id") is not None)
+            role_ids.extend(
+                str(relation.get("role_id"))
+                for relation in relations
+                if relation.get("role_id") is not None and is_relation_active(relation)
+            )
             break
 
     return ensure_distinct_ids(role_ids)
@@ -139,7 +147,9 @@ def get_user_permission_ids(user_id: object, user_permissions_collection: Collec
         relations = list(user_permissions_collection.find({"user_id": candidate}))
         if relations:
             permission_ids.extend(
-                str(relation.get("permission_id")) for relation in relations if relation.get("permission_id") is not None
+                str(relation.get("permission_id"))
+                for relation in relations
+                if relation.get("permission_id") is not None and is_relation_active(relation)
             )
             break
 

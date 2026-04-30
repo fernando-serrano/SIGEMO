@@ -11,6 +11,7 @@ from app.utils.access import (
     get_role_permission_ids,
     get_user_permission_ids,
     get_user_role_ids,
+    is_relation_active,
     normalize_active_state,
 )
 
@@ -26,7 +27,9 @@ def serialize_permission(
         relations = list(role_permissions_collection.find({"permission_id": candidate}))
         if relations:
             role_ids = ensure_distinct_ids(
-                str(relation.get("role_id")) for relation in relations if relation.get("role_id") is not None
+                str(relation.get("role_id"))
+                for relation in relations
+                if relation.get("role_id") is not None and is_relation_active(relation)
             )
             break
 
@@ -35,7 +38,9 @@ def serialize_permission(
         relations = list(user_permissions_collection.find({"permission_id": candidate}))
         if relations:
             user_ids = ensure_distinct_ids(
-                str(relation.get("user_id")) for relation in relations if relation.get("user_id") is not None
+                str(relation.get("user_id"))
+                for relation in relations
+                if relation.get("user_id") is not None and is_relation_active(relation)
             )
             break
 
@@ -63,7 +68,9 @@ def serialize_role(
         relations = list(user_roles_collection.find({"role_id": candidate}))
         if relations:
             user_ids = ensure_distinct_ids(
-                str(relation.get("user_id")) for relation in relations if relation.get("user_id") is not None
+                str(relation.get("user_id"))
+                for relation in relations
+                if relation.get("user_id") is not None and is_relation_active(relation)
             )
             break
 

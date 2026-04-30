@@ -143,7 +143,12 @@ function getUserRoleBadges(user: AccessUser | null): string[] {
                 </td>
                 <td>{{ describeEffectivePermissionCount(user) }}</td>
                 <td>
-                  <span class="badge badge--sm" :class="user.is_active ? 'badge--success' : 'badge--danger'">
+                  <span
+                    class="status-indicator"
+                    :class="user.is_active ? 'status-indicator--online' : 'status-indicator--offline'"
+                    :title="user.is_active ? 'Activo' : 'Inactivo'"
+                    :aria-label="user.is_active ? 'Activo' : 'Inactivo'"
+                  >
                     {{ user.is_active ? 'Activo' : 'Inactivo' }}
                   </span>
                 </td>
@@ -158,30 +163,24 @@ function getUserRoleBadges(user: AccessUser | null): string[] {
     </section>
 
     <section class="card card--acrylic tracking-card users-detail-card" aria-label="Resumen del usuario">
-      <header class="card__header tracking-card-header--space-between">
-        <div>
-          <p class="card__header-title tracking-card-title">RESUMEN RAPIDO</p>
-          <p class="users-card-copy">Selecciona un usuario para ver su ficha resumida sin abrir el flujo de edicion.</p>
-        </div>
-      </header>
-
       <div class="card__body users-detail-body">
         <template v-if="selectedUser">
           <div class="users-detail-header">
             <p class="users-detail-name">{{ selectedUser.fullname || selectedUser.username }}</p>
-            <span class="badge badge--sm" :class="selectedUser.is_active ? 'badge--success' : 'badge--danger'">
-              {{ selectedUser.is_active ? 'Activo' : 'Inactivo' }}
+            <span class="users-detail-status" :title="selectedUser.is_active ? 'Activo' : 'Inactivo'">
+              <span class="status-dot" :class="selectedUser.is_active ? '' : 'status-dot--offline'" aria-hidden="true" />
+              <span>{{ selectedUser.is_active ? 'Activo' : 'Inactivo' }}</span>
             </span>
           </div>
 
-          <div class="users-detail-grid">
+          <div class="users-detail-stack">
             <article class="users-detail-item">
               <span class="users-detail-label">Username</span>
-              <span class="users-detail-value">{{ selectedUser.username }}</span>
+              <span class="users-detail-value users-detail-value--accent">{{ selectedUser.username }}</span>
             </article>
             <article class="users-detail-item">
               <span class="users-detail-label">Correo</span>
-              <span class="users-detail-value users-detail-value--compact users-detail-value--break">{{ selectedUser.email || '-' }}</span>
+              <span class="users-detail-value users-detail-value--accent users-detail-value--compact users-detail-value--break">{{ selectedUser.email || '-' }}</span>
             </article>
             <article class="users-detail-item">
               <span class="users-detail-label">Area</span>
@@ -214,7 +213,7 @@ function getUserRoleBadges(user: AccessUser | null): string[] {
         </template>
 
         <div v-else class="users-empty-state">
-          Selecciona un usuario del listado para ver su informacion resumida o inicia el flujo de nuevo usuario.
+          Selecciona un usuario del listado para ver su ficha resumida.
         </div>
       </div>
     </section>
