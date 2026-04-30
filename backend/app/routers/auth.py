@@ -1,7 +1,9 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from pymongo.collection import Collection
 
-from app.db import get_roles_collection, get_user_roles_collection, get_users_collection
+from app.db import get_roles_collection_dep, get_user_roles_collection_dep, get_users_collection_dep
+from app.exceptions import AppException
 from app.schemas.auth import LoginRequest, LoginResponse, LoginUser
 from app.utils.access import build_display_name, build_object_id_candidates, normalize_active_state
 from app.utils.security import is_password_hash, verify_password, hash_password
@@ -9,11 +11,10 @@ from app.utils.security import is_password_hash, verify_password, hash_password
 router = APIRouter(prefix="/api", tags=["auth"])
 
 
-def resolve_user_role(user_id: object) -> tuple[str | None, str, str]:
+def resolve_user_role(user_id: object, user_roles_collection: Collection, roles_collection: Collection) -> tuple[str | None, str, str]:
     if user_id is None:
         return None, "", ""
 
-    user_roles_collection = get_user_roles_collection()
     relation = None
 
     for candidate in build_object_id_candidates(user_id):
@@ -28,7 +29,6 @@ def resolve_user_role(user_id: object) -> tuple[str | None, str, str]:
     if role_id is None:
         return None, "", ""
 
-    roles_collection = get_roles_collection()
     for candidate in build_object_id_candidates(role_id):
         role = roles_collection.find_one({"_id": candidate})
         if role:
@@ -42,44 +42,37 @@ def resolve_user_role(user_id: object) -> tuple[str | None, str, str]:
 
 
 @router.post("/login", response_model=LoginResponse)
-def login(payload: LoginRequest):
+def login(
+    payload: LoginRequest,
+    users_collection: Collection = Depends(get_users_collection_dep),
+    roles_collection: Collection = Depends(get_roles_collection_dep),
+    user_roles_collection: Collection = Depends(get_user_roles_collection_dep),
+):
     username = payload.username.strip()
     password_hash = payload.password_hash
 
     if not username or not password_hash:
-        return JSONResponse(
-            status_code=400,
-            content={"ok": False, "message": "Usuario y contrasena son obligatorios"},
-        )
+        raise AppException(400, "Usuario y contrasena son obligatorios")
 
-    user = get_users_collection().find_one({"username": username})
+    user = users_collection.find_one({"username": username})
 
     if not user:
-        return JSONResponse(
-            status_code=401,
-            content={"ok": False, "message": "Credenciales invalidas"},
-        )
+        raise AppException(401, "Credenciales invalidas")
 
     stored_password = str(user.get("password_hash", ""))
     if not verify_password(password_hash, stored_password):
-        return JSONResponse(
-            status_code=401,
-            content={"ok": False, "message": "Credenciales invalidas"},
-        )
+        raise AppException(401, "Credenciales invalidas")
 
     if stored_password and not is_password_hash(stored_password):
-        get_users_collection().update_one(
+        users_collection.update_one(
             {"_id": user.get("_id")},
             {"$set": {"password_hash": hash_password(password_hash)}},
         )
 
     if not normalize_active_state(user):
-        return JSONResponse(
-            status_code=403,
-            content={"ok": False, "message": "Usuario inactivo"},
-        )
+        raise AppException(403, "Usuario inactivo")
 
-    resolved_role_id, resolved_role_name, resolved_role_code = resolve_user_role(user.get("_id"))
+    resolved_role_id, resolved_role_name, resolved_role_code = resolve_user_role(user.get("_id"), user_roles_collection, roles_collection)
     name, last_name, fullname = build_display_name(user)
 
     response_user = LoginUser(

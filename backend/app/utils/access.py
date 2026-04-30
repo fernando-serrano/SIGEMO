@@ -4,14 +4,7 @@ from collections.abc import Iterable
 
 from bson import ObjectId
 from bson.errors import InvalidId
-
-from app.db import (
-    get_permissions_collection,
-    get_role_permissions_collection,
-    get_roles_collection,
-    get_user_permissions_collection,
-    get_user_roles_collection,
-)
+from pymongo.collection import Collection
 
 
 def build_object_id_candidates(value: object) -> list[object]:
@@ -97,8 +90,7 @@ def build_distinct_lookup_candidates(values: Iterable[object]) -> list[object]:
     return candidates
 
 
-def fetch_role_documents_by_ids(role_ids: Iterable[str]) -> list[dict]:
-    roles_collection = get_roles_collection()
+def fetch_role_documents_by_ids(role_ids: Iterable[str], roles_collection: Collection) -> list[dict]:
     candidates = build_distinct_lookup_candidates(role_ids)
     if not candidates:
         return []
@@ -106,8 +98,7 @@ def fetch_role_documents_by_ids(role_ids: Iterable[str]) -> list[dict]:
     return list(roles_collection.find({"_id": {"$in": candidates}}))
 
 
-def fetch_permission_documents_by_ids(permission_ids: Iterable[str]) -> list[dict]:
-    permissions_collection = get_permissions_collection()
+def fetch_permission_documents_by_ids(permission_ids: Iterable[str], permissions_collection: Collection) -> list[dict]:
     candidates = build_distinct_lookup_candidates(permission_ids)
     if not candidates:
         return []
@@ -115,8 +106,7 @@ def fetch_permission_documents_by_ids(permission_ids: Iterable[str]) -> list[dic
     return list(permissions_collection.find({"_id": {"$in": candidates}}))
 
 
-def get_user_role_ids(user_id: object) -> list[str]:
-    user_roles_collection = get_user_roles_collection()
+def get_user_role_ids(user_id: object, user_roles_collection: Collection) -> list[str]:
     role_ids: list[str] = []
 
     for candidate in build_object_id_candidates(user_id):
@@ -128,8 +118,7 @@ def get_user_role_ids(user_id: object) -> list[str]:
     return ensure_distinct_ids(role_ids)
 
 
-def get_role_permission_ids(role_id: object) -> list[str]:
-    role_permissions_collection = get_role_permissions_collection()
+def get_role_permission_ids(role_id: object, role_permissions_collection: Collection) -> list[str]:
     permission_ids: list[str] = []
 
     for candidate in build_object_id_candidates(role_id):
@@ -143,8 +132,7 @@ def get_role_permission_ids(role_id: object) -> list[str]:
     return ensure_distinct_ids(permission_ids)
 
 
-def get_user_permission_ids(user_id: object) -> list[str]:
-    user_permissions_collection = get_user_permissions_collection()
+def get_user_permission_ids(user_id: object, user_permissions_collection: Collection) -> list[str]:
     permission_ids: list[str] = []
 
     for candidate in build_object_id_candidates(user_id):
@@ -158,10 +146,14 @@ def get_user_permission_ids(user_id: object) -> list[str]:
     return ensure_distinct_ids(permission_ids)
 
 
-def get_effective_permission_ids(role_ids: Iterable[str], direct_permission_ids: Iterable[str]) -> list[str]:
+def get_effective_permission_ids(
+    role_ids: Iterable[str],
+    direct_permission_ids: Iterable[str],
+    role_permissions_collection: Collection,
+) -> list[str]:
     combined_permission_ids = list(direct_permission_ids)
 
     for role_id in role_ids:
-        combined_permission_ids.extend(get_role_permission_ids(role_id))
+        combined_permission_ids.extend(get_role_permission_ids(role_id, role_permissions_collection))
 
     return ensure_distinct_ids(combined_permission_ids)

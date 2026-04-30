@@ -1,16 +1,18 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from pymongo.collection import Collection
 
 from app.db import (
-    get_permissions_collection,
-    get_role_permissions_collection,
-    get_roles_collection,
-    get_user_permissions_collection,
-    get_user_roles_collection,
-    get_users_collection,
+    get_permissions_collection_dep,
+    get_role_permissions_collection_dep,
+    get_roles_collection_dep,
+    get_user_permissions_collection_dep,
+    get_user_roles_collection_dep,
+    get_users_collection_dep,
 )
+from app.exceptions import AppException
 from app.services.access_catalog import build_access_catalog_response
 from app.schemas.users import (
     AccessCatalogResponse,
@@ -26,7 +28,6 @@ from app.schemas.users import (
     UserUpsertRequest,
 )
 from app.utils.access import (
-    build_display_name,
     build_object_id_candidates,
     ensure_distinct_ids,
     fetch_permission_documents_by_ids,
@@ -35,92 +36,15 @@ from app.utils.access import (
     get_role_permission_ids,
     get_user_permission_ids,
     get_user_role_ids,
-    normalize_active_state,
     parse_object_id,
 )
 from app.utils.security import hash_password
+from app.utils.serializers import serialize_permission, serialize_role, serialize_user
 
 router = APIRouter(prefix="/api", tags=["users"])
 
 
-def serialize_permission(permission: dict) -> PermissionSummary:
-    permission_id = str(permission.get("_id"))
-    role_ids: list[str] = []
-    for candidate in build_object_id_candidates(permission_id):
-        relations = list(get_role_permissions_collection().find({"permission_id": candidate}))
-        if relations:
-            role_ids = ensure_distinct_ids(
-                str(relation.get("role_id")) for relation in relations if relation.get("role_id") is not None
-            )
-            break
-
-    user_ids: list[str] = []
-    for candidate in build_object_id_candidates(permission_id):
-        relations = list(get_user_permissions_collection().find({"permission_id": candidate}))
-        if relations:
-            user_ids = ensure_distinct_ids(
-                str(relation.get("user_id")) for relation in relations if relation.get("user_id") is not None
-            )
-            break
-
-    return PermissionSummary(
-        id=permission_id,
-        codigo=str(permission.get("codigo", "")).strip(),
-        nombre=str(permission.get("nombre", "")).strip(),
-        modulo=str(permission.get("modulo", "")).strip(),
-        accion=str(permission.get("accion", "")).strip(),
-        descripcion=str(permission.get("descripcion", "")).strip(),
-        estado=normalize_active_state(permission),
-        role_ids=role_ids,
-        user_ids=user_ids,
-    )
-
-
-def serialize_role(role: dict) -> RoleSummary:
-    role_id = str(role.get("_id"))
-    user_ids: list[str] = []
-    for candidate in build_object_id_candidates(role_id):
-        relations = list(get_user_roles_collection().find({"role_id": candidate}))
-        if relations:
-            user_ids = ensure_distinct_ids(
-                str(relation.get("user_id")) for relation in relations if relation.get("user_id") is not None
-            )
-            break
-
-    return RoleSummary(
-        id=role_id,
-        codigo=str(role.get("codigo", "")).strip(),
-        nombre=str(role.get("nombre", "")).strip(),
-        descripcion=str(role.get("descripcion", "")).strip(),
-        estado=normalize_active_state(role),
-        permission_ids=get_role_permission_ids(role_id),
-        user_ids=user_ids,
-    )
-
-
-def serialize_user(user: dict) -> UserSummary:
-    user_id = str(user.get("_id"))
-    name, last_name, fullname = build_display_name(user)
-    role_ids = get_user_role_ids(user_id)
-    permission_ids = get_user_permission_ids(user_id)
-
-    return UserSummary(
-        id=user_id,
-        username=str(user.get("username", "")).strip(),
-        name=name,
-        last_name=last_name,
-        fullname=fullname,
-        email=str(user.get("email", "")).strip(),
-        area=str(user.get("area", "")).strip(),
-        is_active=normalize_active_state(user),
-        role_ids=role_ids,
-        permission_ids=permission_ids,
-        effective_permission_ids=get_effective_permission_ids(role_ids, permission_ids),
-    )
-
-
-def replace_user_roles(user_id: str, role_ids: list[str]) -> None:
-    user_roles_collection = get_user_roles_collection()
+def replace_user_roles(user_id: str, role_ids: list[str], user_roles_collection: Collection) -> None:
     normalized_role_ids = ensure_distinct_ids(role_ids)
 
     user_roles_collection.delete_many({"user_id": {"$in": build_object_id_candidates(user_id)}})
@@ -129,8 +53,7 @@ def replace_user_roles(user_id: str, role_ids: list[str]) -> None:
         user_roles_collection.insert_one({"user_id": user_id, "role_id": role_id})
 
 
-def replace_role_users(role_id: str, user_ids: list[str]) -> None:
-    user_roles_collection = get_user_roles_collection()
+def replace_role_users(role_id: str, user_ids: list[str], user_roles_collection: Collection) -> None:
     normalized_user_ids = ensure_distinct_ids(user_ids)
 
     user_roles_collection.delete_many({"role_id": {"$in": build_object_id_candidates(role_id)}})
@@ -139,8 +62,7 @@ def replace_role_users(role_id: str, user_ids: list[str]) -> None:
         user_roles_collection.insert_one({"user_id": user_id, "role_id": role_id})
 
 
-def replace_user_permissions(user_id: str, permission_ids: list[str]) -> None:
-    user_permissions_collection = get_user_permissions_collection()
+def replace_user_permissions(user_id: str, permission_ids: list[str], user_permissions_collection: Collection) -> None:
     normalized_permission_ids = ensure_distinct_ids(permission_ids)
 
     user_permissions_collection.delete_many({"user_id": {"$in": build_object_id_candidates(user_id)}})
@@ -149,8 +71,7 @@ def replace_user_permissions(user_id: str, permission_ids: list[str]) -> None:
         user_permissions_collection.insert_one({"user_id": user_id, "permission_id": permission_id})
 
 
-def replace_role_permissions(role_id: str, permission_ids: list[str]) -> None:
-    role_permissions_collection = get_role_permissions_collection()
+def replace_role_permissions(role_id: str, permission_ids: list[str], role_permissions_collection: Collection) -> None:
     normalized_permission_ids = ensure_distinct_ids(permission_ids)
 
     role_permissions_collection.delete_many({"role_id": {"$in": build_object_id_candidates(role_id)}})
@@ -159,8 +80,7 @@ def replace_role_permissions(role_id: str, permission_ids: list[str]) -> None:
         role_permissions_collection.insert_one({"role_id": role_id, "permission_id": permission_id})
 
 
-def replace_permission_roles(permission_id: str, role_ids: list[str]) -> None:
-    role_permissions_collection = get_role_permissions_collection()
+def replace_permission_roles(permission_id: str, role_ids: list[str], role_permissions_collection: Collection) -> None:
     normalized_role_ids = ensure_distinct_ids(role_ids)
 
     role_permissions_collection.delete_many({"permission_id": {"$in": build_object_id_candidates(permission_id)}})
@@ -169,8 +89,7 @@ def replace_permission_roles(permission_id: str, role_ids: list[str]) -> None:
         role_permissions_collection.insert_one({"role_id": role_id, "permission_id": permission_id})
 
 
-def replace_permission_users(permission_id: str, user_ids: list[str]) -> None:
-    user_permissions_collection = get_user_permissions_collection()
+def replace_permission_users(permission_id: str, user_ids: list[str], user_permissions_collection: Collection) -> None:
     normalized_user_ids = ensure_distinct_ids(user_ids)
 
     user_permissions_collection.delete_many({"permission_id": {"$in": build_object_id_candidates(permission_id)}})
@@ -179,9 +98,9 @@ def replace_permission_users(permission_id: str, user_ids: list[str]) -> None:
         user_permissions_collection.insert_one({"user_id": user_id, "permission_id": permission_id})
 
 
-def validate_role_ids(role_ids: list[str]) -> list[str]:
+def validate_role_ids(role_ids: list[str], roles_collection: Collection) -> list[str]:
     normalized_role_ids = ensure_distinct_ids(role_ids)
-    role_documents = fetch_role_documents_by_ids(normalized_role_ids)
+    role_documents = fetch_role_documents_by_ids(normalized_role_ids, roles_collection)
 
     if len(role_documents) != len(normalized_role_ids):
         raise ValueError("Se encontraron roles invalidos en la solicitud")
@@ -189,9 +108,9 @@ def validate_role_ids(role_ids: list[str]) -> list[str]:
     return normalized_role_ids
 
 
-def validate_permission_ids(permission_ids: list[str]) -> list[str]:
+def validate_permission_ids(permission_ids: list[str], permissions_collection: Collection) -> list[str]:
     normalized_permission_ids = ensure_distinct_ids(permission_ids)
-    permission_documents = fetch_permission_documents_by_ids(normalized_permission_ids)
+    permission_documents = fetch_permission_documents_by_ids(normalized_permission_ids, permissions_collection)
 
     if len(permission_documents) != len(normalized_permission_ids):
         raise ValueError("Se encontraron permisos invalidos en la solicitud")
@@ -199,13 +118,13 @@ def validate_permission_ids(permission_ids: list[str]) -> list[str]:
     return normalized_permission_ids
 
 
-def validate_user_ids(user_ids: list[str]) -> list[str]:
+def validate_user_ids(user_ids: list[str], users_collection: Collection) -> list[str]:
     normalized_user_ids = ensure_distinct_ids(user_ids)
     candidates: list[object] = []
     for user_id in normalized_user_ids:
         candidates.extend(build_object_id_candidates(user_id))
 
-    user_documents = list(get_users_collection().find({"_id": {"$in": candidates}})) if candidates else []
+    user_documents = list(users_collection.find({"_id": {"$in": candidates}})) if candidates else []
 
     if len(user_documents) != len(normalized_user_ids):
         raise ValueError("Se encontraron usuarios invalidos en la solicitud")
@@ -214,26 +133,40 @@ def validate_user_ids(user_ids: list[str]) -> list[str]:
 
 
 @router.get("/access/catalog", response_model=AccessCatalogResponse)
-def get_access_catalog():
-    return build_access_catalog_response()
+def get_access_catalog(
+    users_collection: Collection = Depends(get_users_collection_dep),
+    roles_collection: Collection = Depends(get_roles_collection_dep),
+    permissions_collection: Collection = Depends(get_permissions_collection_dep),
+    user_roles_collection: Collection = Depends(get_user_roles_collection_dep),
+    role_permissions_collection: Collection = Depends(get_role_permissions_collection_dep),
+    user_permissions_collection: Collection = Depends(get_user_permissions_collection_dep),
+):
+    return build_access_catalog_response(
+        users_collection, roles_collection, permissions_collection,
+        user_roles_collection, role_permissions_collection, user_permissions_collection
+    )
 
 
 @router.post("/users", response_model=MutationResponse)
-def create_user(payload: UserUpsertRequest):
-    users_collection = get_users_collection()
+def create_user(
+    payload: UserUpsertRequest,
+    users_collection: Collection = Depends(get_users_collection_dep),
+    roles_collection: Collection = Depends(get_roles_collection_dep),
+    permissions_collection: Collection = Depends(get_permissions_collection_dep),
+    user_roles_collection: Collection = Depends(get_user_roles_collection_dep),
+    role_permissions_collection: Collection = Depends(get_role_permissions_collection_dep),
+    user_permissions_collection: Collection = Depends(get_user_permissions_collection_dep),
+):
     username = payload.username.strip()
 
     if users_collection.find_one({"username": username}):
-        return JSONResponse(
-            status_code=409,
-            content={"ok": False, "message": "Ya existe un usuario con ese username"},
-        )
+        raise AppException(409, "Ya existe un usuario con ese username")
 
     try:
-        role_ids = validate_role_ids(payload.role_ids)
-        permission_ids = validate_permission_ids(payload.permission_ids)
+        role_ids = validate_role_ids(payload.role_ids, roles_collection)
+        permission_ids = validate_permission_ids(payload.permission_ids, permissions_collection)
     except ValueError as error:
-        return JSONResponse(status_code=400, content={"ok": False, "message": str(error)})
+        raise AppException(400, str(error))
 
     user_document = {
         "username": username,
@@ -249,36 +182,49 @@ def create_user(payload: UserUpsertRequest):
     insert_result = users_collection.insert_one(user_document)
     user_id = str(insert_result.inserted_id)
 
-    replace_user_roles(user_id, role_ids)
-    replace_user_permissions(user_id, permission_ids)
+    replace_user_roles(user_id, role_ids, user_roles_collection)
+    replace_user_permissions(user_id, permission_ids, user_permissions_collection)
 
     created_user = users_collection.find_one({"_id": insert_result.inserted_id})
-    return MutationResponse(ok=True, message="Usuario creado correctamente", user=serialize_user(created_user or user_document))
+    return MutationResponse(
+        ok=True,
+        message="Usuario creado correctamente",
+        user=serialize_user(
+            created_user or user_document,
+            user_roles_collection,
+            user_permissions_collection,
+            role_permissions_collection,
+        ),
+    )
 
 
 @router.put("/users/{user_id}", response_model=MutationResponse)
-def update_user(user_id: str, payload: UserUpsertRequest):
-    users_collection = get_users_collection()
-
+def update_user(
+    user_id: str,
+    payload: UserUpsertRequest,
+    users_collection: Collection = Depends(get_users_collection_dep),
+    roles_collection: Collection = Depends(get_roles_collection_dep),
+    permissions_collection: Collection = Depends(get_permissions_collection_dep),
+    user_roles_collection: Collection = Depends(get_user_roles_collection_dep),
+    role_permissions_collection: Collection = Depends(get_role_permissions_collection_dep),
+    user_permissions_collection: Collection = Depends(get_user_permissions_collection_dep),
+):
     try:
         object_id = parse_object_id(user_id)
-        role_ids = validate_role_ids(payload.role_ids)
-        permission_ids = validate_permission_ids(payload.permission_ids)
+        role_ids = validate_role_ids(payload.role_ids, roles_collection)
+        permission_ids = validate_permission_ids(payload.permission_ids, permissions_collection)
     except ValueError as error:
-        return JSONResponse(status_code=400, content={"ok": False, "message": str(error)})
+        raise AppException(400, str(error))
 
     existing_user = users_collection.find_one({"_id": object_id})
 
     if not existing_user:
-        return JSONResponse(status_code=404, content={"ok": False, "message": "Usuario no encontrado"})
+        raise AppException(404, "Usuario no encontrado")
 
     username = payload.username.strip()
     duplicate_user = users_collection.find_one({"username": username, "_id": {"$ne": object_id}})
     if duplicate_user:
-        return JSONResponse(
-            status_code=409,
-            content={"ok": False, "message": "Ya existe otro usuario con ese username"},
-        )
+        raise AppException(409, "Ya existe otro usuario con ese username")
 
     update_fields = {
         "username": username,
@@ -295,25 +241,34 @@ def update_user(user_id: str, payload: UserUpsertRequest):
         update_fields["password_hash"] = hash_password(password_hash)
 
     users_collection.update_one({"_id": object_id}, {"$set": update_fields})
-    replace_user_roles(user_id, role_ids)
-    replace_user_permissions(user_id, permission_ids)
+    replace_user_roles(user_id, role_ids, user_roles_collection)
+    replace_user_permissions(user_id, permission_ids, user_permissions_collection)
 
     updated_user = users_collection.find_one({"_id": object_id})
-    return MutationResponse(ok=True, message="Usuario actualizado correctamente", user=serialize_user(updated_user or {}))
+    return MutationResponse(
+        ok=True,
+        message="Usuario actualizado correctamente",
+        user=serialize_user(updated_user or {}, user_roles_collection, user_permissions_collection, role_permissions_collection),
+    )
 
 
 @router.patch("/users/{user_id}/status", response_model=MutationResponse)
-def update_user_status(user_id: str, payload: UserStatusRequest):
-    users_collection = get_users_collection()
-
+def update_user_status(
+    user_id: str,
+    payload: UserStatusRequest,
+    users_collection: Collection = Depends(get_users_collection_dep),
+    user_roles_collection: Collection = Depends(get_user_roles_collection_dep),
+    role_permissions_collection: Collection = Depends(get_role_permissions_collection_dep),
+    user_permissions_collection: Collection = Depends(get_user_permissions_collection_dep),
+):
     try:
         object_id = parse_object_id(user_id)
     except ValueError as error:
-        return JSONResponse(status_code=400, content={"ok": False, "message": str(error)})
+        raise AppException(400, str(error))
 
     existing_user = users_collection.find_one({"_id": object_id})
     if not existing_user:
-        return JSONResponse(status_code=404, content={"ok": False, "message": "Usuario no encontrado"})
+        raise AppException(404, "Usuario no encontrado")
 
     users_collection.update_one(
         {"_id": object_id},
@@ -321,65 +276,95 @@ def update_user_status(user_id: str, payload: UserStatusRequest):
     )
 
     updated_user = users_collection.find_one({"_id": object_id})
-    return MutationResponse(ok=True, message="Estado de usuario actualizado", user=serialize_user(updated_user or {}))
+    return MutationResponse(
+        ok=True,
+        message="Estado de usuario actualizado",
+        user=serialize_user(updated_user or {}, user_roles_collection, user_permissions_collection, role_permissions_collection),
+    )
 
 
 @router.put("/users/{user_id}/access", response_model=MutationResponse)
-def update_user_access(user_id: str, payload: UserAccessRequest):
-    users_collection = get_users_collection()
-
+def update_user_access(
+    user_id: str,
+    payload: UserAccessRequest,
+    users_collection: Collection = Depends(get_users_collection_dep),
+    roles_collection: Collection = Depends(get_roles_collection_dep),
+    permissions_collection: Collection = Depends(get_permissions_collection_dep),
+    user_roles_collection: Collection = Depends(get_user_roles_collection_dep),
+    role_permissions_collection: Collection = Depends(get_role_permissions_collection_dep),
+    user_permissions_collection: Collection = Depends(get_user_permissions_collection_dep),
+):
     try:
         object_id = parse_object_id(user_id)
-        role_ids = validate_role_ids(payload.role_ids)
-        permission_ids = validate_permission_ids(payload.permission_ids)
+        role_ids = validate_role_ids(payload.role_ids, roles_collection)
+        permission_ids = validate_permission_ids(payload.permission_ids, permissions_collection)
     except ValueError as error:
-        return JSONResponse(status_code=400, content={"ok": False, "message": str(error)})
+        raise AppException(400, str(error))
 
     existing_user = users_collection.find_one({"_id": object_id})
     if not existing_user:
-        return JSONResponse(status_code=404, content={"ok": False, "message": "Usuario no encontrado"})
+        raise AppException(404, "Usuario no encontrado")
 
-    replace_user_roles(user_id, role_ids)
-    replace_user_permissions(user_id, permission_ids)
+    replace_user_roles(user_id, role_ids, user_roles_collection)
+    replace_user_permissions(user_id, permission_ids, user_permissions_collection)
 
     updated_user = users_collection.find_one({"_id": object_id})
-    return MutationResponse(ok=True, message="Accesos del usuario actualizados", user=serialize_user(updated_user or {}))
+    return MutationResponse(
+        ok=True,
+        message="Accesos del usuario actualizados",
+        user=serialize_user(updated_user or {}, user_roles_collection, user_permissions_collection, role_permissions_collection),
+    )
 
 
 @router.put("/roles/{role_id}/permissions", response_model=MutationResponse)
-def update_role_permissions(role_id: str, payload: RolePermissionsRequest):
-    roles_collection = get_roles_collection()
-
+def update_role_permissions(
+    role_id: str,
+    payload: RolePermissionsRequest,
+    roles_collection: Collection = Depends(get_roles_collection_dep),
+    permissions_collection: Collection = Depends(get_permissions_collection_dep),
+    role_permissions_collection: Collection = Depends(get_role_permissions_collection_dep),
+    user_roles_collection: Collection = Depends(get_user_roles_collection_dep),
+):
     try:
         object_id = parse_object_id(role_id)
-        permission_ids = validate_permission_ids(payload.permission_ids)
+        permission_ids = validate_permission_ids(payload.permission_ids, permissions_collection)
     except ValueError as error:
-        return JSONResponse(status_code=400, content={"ok": False, "message": str(error)})
+        raise AppException(400, str(error))
 
     existing_role = roles_collection.find_one({"_id": object_id})
     if not existing_role:
-        return JSONResponse(status_code=404, content={"ok": False, "message": "Rol no encontrado"})
+        raise AppException(404, "Rol no encontrado")
 
-    replace_role_permissions(role_id, permission_ids)
+    replace_role_permissions(role_id, permission_ids, role_permissions_collection)
 
     updated_role = roles_collection.find_one({"_id": object_id})
-    return MutationResponse(ok=True, message="Permisos del rol actualizados", role=serialize_role(updated_role or {}))
+    return MutationResponse(
+        ok=True,
+        message="Permisos del rol actualizados",
+        role=serialize_role(updated_role or {}, user_roles_collection, role_permissions_collection),
+    )
 
 
 @router.post("/roles", response_model=MutationResponse)
-def create_role(payload: RoleUpsertRequest):
-    roles_collection = get_roles_collection()
+def create_role(
+    payload: RoleUpsertRequest,
+    roles_collection: Collection = Depends(get_roles_collection_dep),
+    permissions_collection: Collection = Depends(get_permissions_collection_dep),
+    users_collection: Collection = Depends(get_users_collection_dep),
+    user_roles_collection: Collection = Depends(get_user_roles_collection_dep),
+    role_permissions_collection: Collection = Depends(get_role_permissions_collection_dep),
+):
     codigo = payload.codigo.strip()
     nombre = payload.nombre.strip()
 
     if roles_collection.find_one({"codigo": codigo}):
-        return JSONResponse(status_code=409, content={"ok": False, "message": "Ya existe un rol con ese codigo"})
+        raise AppException(409, "Ya existe un rol con ese codigo")
 
     try:
-        permission_ids = validate_permission_ids(payload.permission_ids)
-        user_ids = validate_user_ids(payload.user_ids)
+        permission_ids = validate_permission_ids(payload.permission_ids, permissions_collection)
+        user_ids = validate_user_ids(payload.user_ids, users_collection)
     except ValueError as error:
-        return JSONResponse(status_code=400, content={"ok": False, "message": str(error)})
+        raise AppException(400, str(error))
 
     role_document = {
         "codigo": codigo,
@@ -392,32 +377,42 @@ def create_role(payload: RoleUpsertRequest):
     insert_result = roles_collection.insert_one(role_document)
     role_id = str(insert_result.inserted_id)
 
-    replace_role_permissions(role_id, permission_ids)
-    replace_role_users(role_id, user_ids)
+    replace_role_permissions(role_id, permission_ids, role_permissions_collection)
+    replace_role_users(role_id, user_ids, user_roles_collection)
 
     created_role = roles_collection.find_one({"_id": insert_result.inserted_id})
-    return MutationResponse(ok=True, message="Rol creado correctamente", role=serialize_role(created_role or role_document))
+    return MutationResponse(
+        ok=True,
+        message="Rol creado correctamente",
+        role=serialize_role(created_role or role_document, user_roles_collection, role_permissions_collection),
+    )
 
 
 @router.put("/roles/{role_id}", response_model=MutationResponse)
-def update_role(role_id: str, payload: RoleUpsertRequest):
-    roles_collection = get_roles_collection()
-
+def update_role(
+    role_id: str,
+    payload: RoleUpsertRequest,
+    roles_collection: Collection = Depends(get_roles_collection_dep),
+    permissions_collection: Collection = Depends(get_permissions_collection_dep),
+    users_collection: Collection = Depends(get_users_collection_dep),
+    user_roles_collection: Collection = Depends(get_user_roles_collection_dep),
+    role_permissions_collection: Collection = Depends(get_role_permissions_collection_dep),
+):
     try:
         object_id = parse_object_id(role_id)
-        permission_ids = validate_permission_ids(payload.permission_ids)
-        user_ids = validate_user_ids(payload.user_ids)
+        permission_ids = validate_permission_ids(payload.permission_ids, permissions_collection)
+        user_ids = validate_user_ids(payload.user_ids, users_collection)
     except ValueError as error:
-        return JSONResponse(status_code=400, content={"ok": False, "message": str(error)})
+        raise AppException(400, str(error))
 
     existing_role = roles_collection.find_one({"_id": object_id})
     if not existing_role:
-        return JSONResponse(status_code=404, content={"ok": False, "message": "Rol no encontrado"})
+        raise AppException(404, "Rol no encontrado")
 
     codigo = payload.codigo.strip()
     duplicate_role = roles_collection.find_one({"codigo": codigo, "_id": {"$ne": object_id}})
     if duplicate_role:
-        return JSONResponse(status_code=409, content={"ok": False, "message": "Ya existe otro rol con ese codigo"})
+        raise AppException(409, "Ya existe otro rol con ese codigo")
 
     roles_collection.update_one(
         {"_id": object_id},
@@ -432,27 +427,37 @@ def update_role(role_id: str, payload: RoleUpsertRequest):
         },
     )
 
-    replace_role_permissions(role_id, permission_ids)
-    replace_role_users(role_id, user_ids)
+    replace_role_permissions(role_id, permission_ids, role_permissions_collection)
+    replace_role_users(role_id, user_ids, user_roles_collection)
 
     updated_role = roles_collection.find_one({"_id": object_id})
-    return MutationResponse(ok=True, message="Rol actualizado correctamente", role=serialize_role(updated_role or {}))
+    return MutationResponse(
+        ok=True,
+        message="Rol actualizado correctamente",
+        role=serialize_role(updated_role or {}, user_roles_collection, role_permissions_collection),
+    )
 
 
 @router.post("/permissions", response_model=MutationResponse)
-def create_permission(payload: PermissionUpsertRequest):
-    permissions_collection = get_permissions_collection()
+def create_permission(
+    payload: PermissionUpsertRequest,
+    permissions_collection: Collection = Depends(get_permissions_collection_dep),
+    roles_collection: Collection = Depends(get_roles_collection_dep),
+    users_collection: Collection = Depends(get_users_collection_dep),
+    role_permissions_collection: Collection = Depends(get_role_permissions_collection_dep),
+    user_permissions_collection: Collection = Depends(get_user_permissions_collection_dep),
+):
     codigo = payload.codigo.strip()
     nombre = payload.nombre.strip()
 
     if permissions_collection.find_one({"codigo": codigo}):
-        return JSONResponse(status_code=409, content={"ok": False, "message": "Ya existe un permiso con ese codigo"})
+        raise AppException(409, "Ya existe un permiso con ese codigo")
 
     try:
-        role_ids = validate_role_ids(payload.role_ids)
-        user_ids = validate_user_ids(payload.user_ids)
+        role_ids = validate_role_ids(payload.role_ids, roles_collection)
+        user_ids = validate_user_ids(payload.user_ids, users_collection)
     except ValueError as error:
-        return JSONResponse(status_code=400, content={"ok": False, "message": str(error)})
+        raise AppException(400, str(error))
 
     permission_document = {
         "codigo": codigo,
@@ -467,36 +472,42 @@ def create_permission(payload: PermissionUpsertRequest):
     insert_result = permissions_collection.insert_one(permission_document)
     permission_id = str(insert_result.inserted_id)
 
-    replace_permission_roles(permission_id, role_ids)
-    replace_permission_users(permission_id, user_ids)
+    replace_permission_roles(permission_id, role_ids, role_permissions_collection)
+    replace_permission_users(permission_id, user_ids, user_permissions_collection)
 
     created_permission = permissions_collection.find_one({"_id": insert_result.inserted_id})
     return MutationResponse(
         ok=True,
         message="Permiso creado correctamente",
-        permission=serialize_permission(created_permission or permission_document),
+        permission=serialize_permission(created_permission or permission_document, role_permissions_collection, user_permissions_collection),
     )
 
 
 @router.put("/permissions/{permission_id}", response_model=MutationResponse)
-def update_permission(permission_id: str, payload: PermissionUpsertRequest):
-    permissions_collection = get_permissions_collection()
-
+def update_permission(
+    permission_id: str,
+    payload: PermissionUpsertRequest,
+    permissions_collection: Collection = Depends(get_permissions_collection_dep),
+    roles_collection: Collection = Depends(get_roles_collection_dep),
+    users_collection: Collection = Depends(get_users_collection_dep),
+    role_permissions_collection: Collection = Depends(get_role_permissions_collection_dep),
+    user_permissions_collection: Collection = Depends(get_user_permissions_collection_dep),
+):
     try:
         object_id = parse_object_id(permission_id)
-        role_ids = validate_role_ids(payload.role_ids)
-        user_ids = validate_user_ids(payload.user_ids)
+        role_ids = validate_role_ids(payload.role_ids, roles_collection)
+        user_ids = validate_user_ids(payload.user_ids, users_collection)
     except ValueError as error:
-        return JSONResponse(status_code=400, content={"ok": False, "message": str(error)})
+        raise AppException(400, str(error))
 
     existing_permission = permissions_collection.find_one({"_id": object_id})
     if not existing_permission:
-        return JSONResponse(status_code=404, content={"ok": False, "message": "Permiso no encontrado"})
+        raise AppException(404, "Permiso no encontrado")
 
     codigo = payload.codigo.strip()
     duplicate_permission = permissions_collection.find_one({"codigo": codigo, "_id": {"$ne": object_id}})
     if duplicate_permission:
-        return JSONResponse(status_code=409, content={"ok": False, "message": "Ya existe otro permiso con ese codigo"})
+        raise AppException(409, "Ya existe otro permiso con ese codigo")
 
     permissions_collection.update_one(
         {"_id": object_id},
@@ -513,12 +524,12 @@ def update_permission(permission_id: str, payload: PermissionUpsertRequest):
         },
     )
 
-    replace_permission_roles(permission_id, role_ids)
-    replace_permission_users(permission_id, user_ids)
+    replace_permission_roles(permission_id, role_ids, role_permissions_collection)
+    replace_permission_users(permission_id, user_ids, user_permissions_collection)
 
     updated_permission = permissions_collection.find_one({"_id": object_id})
     return MutationResponse(
         ok=True,
         message="Permiso actualizado correctamente",
-        permission=serialize_permission(updated_permission or {}),
+        permission=serialize_permission(updated_permission or {}, role_permissions_collection, user_permissions_collection),
     )

@@ -21,9 +21,9 @@ const logoVariant = computed<'dark' | 'light'>(() =>
           </span>
           <span class="auth-hero-title-text">MGA GADSO</span>
         </h1>
-        <p class="auth-hero-module-name">Modulo SIGEMO</p>
+        <p class="auth-hero-module-name">Versión 0.1.0</p>
         <p class="auth-hero-subtitle">
-          SIGEMO es actualmente un modulo de MGA GADSO. La plataforma tambien integrara procesos operativos como SUCAMEC y vacaciones.
+          Plataforma de Gestión Centralizada para GADSO.
         </p>
       </div>
     </div>

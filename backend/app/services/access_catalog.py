@@ -2,18 +2,11 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterable
+from pymongo.collection import Collection
 
 from bson import ObjectId
 from bson.errors import InvalidId
 
-from app.db import (
-    get_permissions_collection,
-    get_role_permissions_collection,
-    get_roles_collection,
-    get_user_permissions_collection,
-    get_user_roles_collection,
-    get_users_collection,
-)
 from app.schemas.users import AccessCatalogResponse, PermissionSummary, RoleSummary, UserSummary
 from app.utils.access import build_display_name, ensure_distinct_ids, normalize_active_state
 
@@ -65,23 +58,30 @@ def _fetch_relations_by_key(collection, key_name: str, value_name: str, source_i
     return _group_relations_by_key(documents, key_name, value_name)
 
 
-def build_access_catalog_response() -> AccessCatalogResponse:
-    users = list(get_users_collection().find().sort("username", 1))
-    roles = list(get_roles_collection().find().sort("nombre", 1))
-    permissions = list(get_permissions_collection().find().sort([("modulo", 1), ("nombre", 1)]))
+def build_access_catalog_response(
+    users_collection: Collection,
+    roles_collection: Collection,
+    permissions_collection: Collection,
+    user_roles_collection: Collection,
+    role_permissions_collection: Collection,
+    user_permissions_collection: Collection,
+) -> AccessCatalogResponse:
+    users = list(users_collection.find().sort("username", 1))
+    roles = list(roles_collection.find().sort("nombre", 1))
+    permissions = list(permissions_collection.find().sort([("modulo", 1), ("nombre", 1)]))
 
     user_ids = [user.get("_id") for user in users]
     role_ids = [role.get("_id") for role in roles]
 
-    user_role_map = _fetch_relations_by_key(get_user_roles_collection(), "user_id", "role_id", user_ids)
-    user_permission_map = _fetch_relations_by_key(get_user_permissions_collection(), "user_id", "permission_id", user_ids)
-    role_permission_map = _fetch_relations_by_key(get_role_permissions_collection(), "role_id", "permission_id", role_ids)
-    role_user_map = _fetch_relations_by_key(get_user_roles_collection(), "role_id", "user_id", role_ids)
+    user_role_map = _fetch_relations_by_key(user_roles_collection, "user_id", "role_id", user_ids)
+    user_permission_map = _fetch_relations_by_key(user_permissions_collection, "user_id", "permission_id", user_ids)
+    role_permission_map = _fetch_relations_by_key(role_permissions_collection, "role_id", "permission_id", role_ids)
+    role_user_map = _fetch_relations_by_key(user_roles_collection, "role_id", "user_id", role_ids)
     permission_role_map = _fetch_relations_by_key(
-        get_role_permissions_collection(), "permission_id", "role_id", [permission.get("_id") for permission in permissions]
+        role_permissions_collection, "permission_id", "role_id", [permission.get("_id") for permission in permissions]
     )
     permission_user_map = _fetch_relations_by_key(
-        get_user_permissions_collection(), "permission_id", "user_id", [permission.get("_id") for permission in permissions]
+        user_permissions_collection, "permission_id", "user_id", [permission.get("_id") for permission in permissions]
     )
 
     serialized_roles = [

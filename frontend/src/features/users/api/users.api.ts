@@ -6,156 +6,40 @@ import type {
   RolePermissionsPayload,
   UserPayload,
 } from '../types'
-
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim()
-
-function buildApiUrl(path: string): string {
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`
-
-  if (!API_BASE_URL) {
-    return normalizedPath
-  }
-
-  return `${API_BASE_URL.replace(/\/$/, '')}${normalizedPath}`
-}
-
-async function readJsonResponse<T>(response: Response): Promise<T> {
-  const contentType = response.headers.get('content-type') || ''
-
-  if (!contentType.includes('application/json')) {
-    throw new Error('El servidor no devolvio una respuesta JSON valida')
-  }
-
-  return (await response.json()) as T
-}
+import { apiClient } from '@/shared/api/client'
 
 export async function fetchAccessCatalog(): Promise<AccessCatalogResponse> {
-  const response = await fetch(buildApiUrl('/api/access/catalog'))
-  const result = await readJsonResponse<AccessCatalogResponse>(response)
-
-  if (!response.ok || !result.ok) {
-    throw new Error('No se pudo cargar el modulo de usuarios')
-  }
-
-  return result
+  return apiClient.get<AccessCatalogResponse>('/api/access/catalog')
 }
 
 export async function createUser(payload: UserPayload): Promise<MutationResponse> {
-  const response = await fetch(buildApiUrl('/api/users'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  const result = await readJsonResponse<MutationResponse>(response)
-
-  if (!response.ok || !result.ok) {
-    throw new Error(result.message || 'No se pudo crear el usuario')
-  }
-
-  return result
+  return apiClient.post<MutationResponse>('/api/users', payload)
 }
 
 export async function updateUser(userId: string, payload: UserPayload): Promise<MutationResponse> {
-  const response = await fetch(buildApiUrl(`/api/users/${userId}`), {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  const result = await readJsonResponse<MutationResponse>(response)
-
-  if (!response.ok || !result.ok) {
-    throw new Error(result.message || 'No se pudo actualizar el usuario')
-  }
-
-  return result
+  return apiClient.put<MutationResponse>(`/api/users/${userId}`, payload)
 }
 
 export async function updateUserStatus(userId: string, isActive: boolean): Promise<MutationResponse> {
-  const response = await fetch(buildApiUrl(`/api/users/${userId}/status`), {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ is_active: isActive }),
-  })
-  const result = await readJsonResponse<MutationResponse>(response)
-
-  if (!response.ok || !result.ok) {
-    throw new Error(result.message || 'No se pudo actualizar el estado del usuario')
-  }
-
-  return result
+  return apiClient.patch<MutationResponse>(`/api/users/${userId}/status`, { is_active: isActive })
 }
 
 export async function updateRolePermissions(roleId: string, payload: RolePermissionsPayload): Promise<MutationResponse> {
-  const response = await fetch(buildApiUrl(`/api/roles/${roleId}/permissions`), {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  const result = await readJsonResponse<MutationResponse>(response)
-
-  if (!response.ok || !result.ok) {
-    throw new Error(result.message || 'No se pudieron actualizar los permisos del rol')
-  }
-
-  return result
+  return apiClient.put<MutationResponse>(`/api/roles/${roleId}/permissions`, payload)
 }
 
 export async function createRole(payload: RolePayload): Promise<MutationResponse> {
-  const response = await fetch(buildApiUrl('/api/roles'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  const result = await readJsonResponse<MutationResponse>(response)
-
-  if (!response.ok || !result.ok) {
-    throw new Error(result.message || 'No se pudo crear el rol')
-  }
-
-  return result
+  return apiClient.post<MutationResponse>('/api/roles', payload)
 }
 
 export async function updateRole(roleId: string, payload: RolePayload): Promise<MutationResponse> {
-  const response = await fetch(buildApiUrl(`/api/roles/${roleId}`), {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  const result = await readJsonResponse<MutationResponse>(response)
-
-  if (!response.ok || !result.ok) {
-    throw new Error(result.message || 'No se pudo actualizar el rol')
-  }
-
-  return result
+  return apiClient.put<MutationResponse>(`/api/roles/${roleId}`, payload)
 }
 
 export async function createPermission(payload: PermissionPayload): Promise<MutationResponse> {
-  const response = await fetch(buildApiUrl('/api/permissions'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  const result = await readJsonResponse<MutationResponse>(response)
-
-  if (!response.ok || !result.ok) {
-    throw new Error(result.message || 'No se pudo crear el permiso')
-  }
-
-  return result
+  return apiClient.post<MutationResponse>('/api/permissions', payload)
 }
 
 export async function updatePermission(permissionId: string, payload: PermissionPayload): Promise<MutationResponse> {
-  const response = await fetch(buildApiUrl(`/api/permissions/${permissionId}`), {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  const result = await readJsonResponse<MutationResponse>(response)
-
-  if (!response.ok || !result.ok) {
-    throw new Error(result.message || 'No se pudo actualizar el permiso')
-  }
-
-  return result
+  return apiClient.put<MutationResponse>(`/api/permissions/${permissionId}`, payload)
 }

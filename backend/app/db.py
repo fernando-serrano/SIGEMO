@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from pymongo import MongoClient
 from pymongo.collection import Collection
+from fastapi import Request
 
 from .config import settings
+
 
 _mongo_client: MongoClient | None = None
 
@@ -41,6 +43,31 @@ def get_role_permissions_collection():
 
 def get_user_permissions_collection():
     return get_db()[settings.user_permissions_collection]
+
+
+# Dependency injection functions for FastAPI
+def get_users_collection_dep(request: Request) -> Collection:
+    return get_users_collection()
+
+
+def get_roles_collection_dep(request: Request) -> Collection:
+    return get_roles_collection()
+
+
+def get_permissions_collection_dep(request: Request) -> Collection:
+    return get_permissions_collection()
+
+
+def get_user_roles_collection_dep(request: Request) -> Collection:
+    return get_user_roles_collection()
+
+
+def get_role_permissions_collection_dep(request: Request) -> Collection:
+    return get_role_permissions_collection()
+
+
+def get_user_permissions_collection_dep(request: Request) -> Collection:
+    return get_user_permissions_collection()
 
 
 def _ensure_relation_indexes(collection: Collection, field_name: str) -> None:

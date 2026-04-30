@@ -281,6 +281,19 @@
   flex-wrap: wrap;
 }
 
+.users-table-email {
+  font-size: 0.88rem;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.users-role-badge-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
 .users-detail-header {
   display: flex;
   align-items: center;
@@ -318,6 +331,29 @@
 .users-detail-value {
   color: var(--fa-color-text-primary);
   line-height: 1.4;
+}
+
+.users-detail-value--compact {
+  font-size: 0.9rem;
+}
+
+.users-detail-value--break {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.users-detail-badges {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.users-detail-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--fa-space-2);
 }
 
 .users-form-grid {

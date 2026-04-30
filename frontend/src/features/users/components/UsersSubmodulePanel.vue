@@ -69,6 +69,17 @@ function getStepMeta(stepId: WizardStep['id']): string {
   if (stepId === 'permisos') return 'Excepciones directas'
   return 'Confirmacion final'
 }
+
+function getUserRoleBadges(user: AccessUser | null): string[] {
+  if (!user) {
+    return []
+  }
+
+  return props.describeUserRoles(user)
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+}
 </script>
 
 <template>
@@ -102,7 +113,6 @@ function getStepMeta(stepId: WizardStep['id']): string {
                 <th>Roles</th>
                 <th>Accesos</th>
                 <th>Estado</th>
-                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -114,24 +124,32 @@ function getStepMeta(stepId: WizardStep['id']): string {
               >
                 <td>{{ user.username }}</td>
                 <td>{{ user.fullname || '-' }}</td>
-                <td>{{ user.email || '-' }}</td>
-                <td>{{ user.area || '-' }}</td>
-                <td>{{ describeUserRoles(user) }}</td>
+                <td class="users-table-email">{{ user.email || '-' }}</td>
+                <td>
+                  <span v-if="user.area" class="badge badge--sm badge--info badge--outline">{{ user.area }}</span>
+                  <span v-else>-</span>
+                </td>
+                <td>
+                  <div class="users-role-badge-list">
+                    <span
+                      v-for="roleLabel in getUserRoleBadges(user)"
+                      :key="`${user.id}-${roleLabel}`"
+                      class="badge badge--sm badge--secondary badge--outline"
+                    >
+                      {{ roleLabel }}
+                    </span>
+                    <span v-if="getUserRoleBadges(user).length === 0">Sin roles</span>
+                  </div>
+                </td>
                 <td>{{ describeEffectivePermissionCount(user) }}</td>
                 <td>
                   <span class="badge badge--sm" :class="user.is_active ? 'badge--success' : 'badge--danger'">
                     {{ user.is_active ? 'Activo' : 'Inactivo' }}
                   </span>
                 </td>
-                <td class="users-table-actions">
-                  <button type="button" class="btn btn--ghost btn--sm" @click.stop="emit('edit-user', user)">Editar</button>
-                  <button type="button" class="btn btn--ghost btn--sm" @click.stop="emit('toggle-user-active', user)">
-                    {{ user.is_active ? 'Desactivar' : 'Activar' }}
-                  </button>
-                </td>
               </tr>
               <tr v-if="filteredUsers.length === 0">
-                <td colspan="8" class="tracking-empty">No hay usuarios que coincidan con la busqueda.</td>
+                <td colspan="7" class="tracking-empty">No hay usuarios que coincidan con la busqueda.</td>
               </tr>
             </tbody>
           </table>
@@ -163,20 +181,35 @@ function getStepMeta(stepId: WizardStep['id']): string {
             </article>
             <article class="users-detail-item">
               <span class="users-detail-label">Correo</span>
-              <span class="users-detail-value">{{ selectedUser.email || '-' }}</span>
+              <span class="users-detail-value users-detail-value--compact users-detail-value--break">{{ selectedUser.email || '-' }}</span>
             </article>
             <article class="users-detail-item">
               <span class="users-detail-label">Area</span>
-              <span class="users-detail-value">{{ selectedUser.area || '-' }}</span>
+              <span class="users-detail-badges">
+                <span v-if="selectedUser.area" class="badge badge--sm badge--info badge--outline">{{ selectedUser.area }}</span>
+                <span v-else class="users-detail-value">-</span>
+              </span>
             </article>
             <article class="users-detail-item">
               <span class="users-detail-label">Roles</span>
-              <span class="users-detail-value">{{ describeUserRoles(selectedUser) }}</span>
+              <span class="users-detail-badges">
+                <span
+                  v-for="roleLabel in getUserRoleBadges(selectedUser)"
+                  :key="`${selectedUser.id}-detail-${roleLabel}`"
+                  class="badge badge--sm badge--secondary badge--outline"
+                >
+                  {{ roleLabel }}
+                </span>
+                <span v-if="getUserRoleBadges(selectedUser).length === 0" class="users-detail-value">Sin roles</span>
+              </span>
             </article>
           </div>
 
-          <div class="users-form-actions users-form-actions--start">
+          <div class="users-detail-actions">
             <button type="button" class="btn btn--primary" @click="emit('edit-user', selectedUser)">Editar usuario</button>
+            <button type="button" class="btn btn--ghost" @click="emit('toggle-user-active', selectedUser)">
+              {{ selectedUser.is_active ? 'Desactivar usuario' : 'Activar usuario' }}
+            </button>
           </div>
         </template>
 
