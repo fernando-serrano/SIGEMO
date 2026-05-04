@@ -43,6 +43,10 @@ const userFeedback = ref('')
 const roleFeedback = ref('')
 const permissionFeedback = ref('')
 const searchTerm = ref('')
+const userRoleFilter = ref('')
+const userStatusFilter = ref('')
+const userPaginationPage = ref(1)
+const userRolePaginationPage = ref(1)
 const roleSearchTerm = ref('')
 const permissionSearchTerm = ref('')
 const selectedUserId = ref<string | null>(null)
@@ -147,19 +151,50 @@ const heroDescription = computed(() => {
 
 const filteredUsers = computed(() => {
   const query = searchTerm.value.trim().toLowerCase()
+  const roleId = userRoleFilter.value.trim()
+  const status = userStatusFilter.value.trim()
 
-  if (!query) {
-    return catalog.users
-  }
+  return catalog.users.filter((user) => {
+    const matchesQuery =
+      !query || [user.username, user.fullname, user.email, user.area].some((value) => value.toLowerCase().includes(query))
+    const matchesRole = !roleId || user.role_ids.includes(roleId)
+    const matchesStatus =
+      !status || (status === 'active' && user.is_active) || (status === 'inactive' && !user.is_active)
 
-  return catalog.users.filter((user) =>
-    [user.username, user.fullname, user.email, user.area].some((value) => value.toLowerCase().includes(query)),
-  )
+    return matchesQuery && matchesRole && matchesStatus
+  })
 })
 
 const sortedUsers = computed(() =>
   [...catalog.users].sort((left, right) => (left.fullname || left.username).localeCompare(right.fullname || right.username)),
 )
+
+const userRoleOptions = computed(() =>
+  [...catalog.roles].sort((left, right) => left.nombre.localeCompare(right.nombre)),
+)
+
+const userPageSize = 6
+
+const userPaginationTotalPages = computed(() => Math.max(1, Math.ceil(filteredUsers.value.length / userPageSize)))
+
+const paginatedUsers = computed(() => {
+  const start = (userPaginationPage.value - 1) * userPageSize
+  return filteredUsers.value.slice(start, start + userPageSize)
+})
+
+const userPaginationPages = computed(() =>
+  Array.from({ length: userPaginationTotalPages.value }, (_, index) => index + 1),
+)
+
+watch([searchTerm, userRoleFilter, userStatusFilter], () => {
+  userPaginationPage.value = 1
+})
+
+watch(userPaginationTotalPages, (totalPages) => {
+  if (userPaginationPage.value > totalPages) {
+    userPaginationPage.value = totalPages
+  }
+})
 
 const filteredRoles = computed(() => {
   const query = roleSearchTerm.value.trim().toLowerCase()
@@ -172,6 +207,29 @@ const filteredRoles = computed(() => {
   return roles.filter((role) =>
     [role.codigo, role.nombre, role.descripcion].join(' ').toLowerCase().includes(query),
   )
+})
+
+const userRolePageSize = 9
+
+const userRolePaginationTotalPages = computed(() => Math.max(1, Math.ceil(filteredRoles.value.length / userRolePageSize)))
+
+const paginatedUserWizardRoles = computed(() => {
+  const start = (userRolePaginationPage.value - 1) * userRolePageSize
+  return filteredRoles.value.slice(start, start + userRolePageSize)
+})
+
+const userRolePaginationPages = computed(() =>
+  Array.from({ length: userRolePaginationTotalPages.value }, (_, index) => index + 1),
+)
+
+watch(filteredRoles, () => {
+  userRolePaginationPage.value = 1
+})
+
+watch(userRolePaginationTotalPages, (totalPages) => {
+  if (userRolePaginationPage.value > totalPages) {
+    userRolePaginationPage.value = totalPages
+  }
 })
 
 const filteredPermissions = computed(() => {
@@ -238,7 +296,7 @@ const currentWizardStepIndex = computed(() =>
   Math.max(0, userWizardSteps.findIndex((step) => step.id === userStep.value)),
 )
 
-const wizardTitle = computed(() => (userViewMode.value === 'create' ? 'Nuevo Usuario' : 'Editar Usuario'))
+const wizardTitle = computed(() => (userViewMode.value === 'create' ? 'NUEVO USUARIO' : 'EDITAR USUARIO'))
 
 const wizardPrimaryLabel = computed(() => {
   if (userStep.value === 'resumen') {
@@ -292,6 +350,10 @@ function dismissToast(toastId: number): void {
 
 function hasUserFormErrors(): boolean {
   return Object.values(userFormErrors.value).some(Boolean)
+}
+
+function getFirstUserFormError(): string {
+  return Object.values(userFormErrors.value).find(Boolean) ?? 'Corrige los campos obligatorios antes de continuar.'
 }
 
 function hasRoleFormErrors(): boolean {
@@ -528,6 +590,7 @@ function goToUserWizardStep(stepId: (typeof userWizardSteps)[number]['id']): voi
   if (!canAccessWizardStep(targetIndex)) {
     userFeedbackTone.value = 'warning'
     userFeedback.value = getWizardBlockMessage(stepId)
+    pushToast('Validacion', userFeedback.value, 'warning')
     return
   }
 
@@ -552,13 +615,15 @@ async function handleWizardPrimaryAction(): Promise<void> {
   if (userStep.value === 'datos' && !isDatosStepComplete()) {
     userValidationAttempted.value = true
     userFeedbackTone.value = 'warning'
-    userFeedback.value = 'Corrige los campos obligatorios antes de continuar.'
+    userFeedback.value = getFirstUserFormError()
+    pushToast('Validacion', userFeedback.value, 'warning')
     return
   }
 
   if (userStep.value === 'roles' && !isRolesStepComplete()) {
     userFeedbackTone.value = 'warning'
     userFeedback.value = 'Selecciona al menos un rol antes de continuar.'
+    pushToast('Validacion', userFeedback.value, 'warning')
     return
   }
 
@@ -954,7 +1019,14 @@ onBeforeUnmount(() => {
       <template v-else-if="activeSection === 'usuarios'">
         <UsersSubmodulePanel
           :search-term="searchTerm"
-          :filtered-users="filteredUsers"
+          :user-role-filter="userRoleFilter"
+          :user-status-filter="userStatusFilter"
+          :user-role-options="userRoleOptions"
+          :filtered-users="paginatedUsers"
+          :user-pagination-page="userPaginationPage"
+          :user-pagination-pages="userPaginationPages"
+          :user-pagination-total-pages="userPaginationTotalPages"
+          :user-pagination-total-items="filteredUsers.length"
           :selected-user-id="selectedUserId"
           :selected-user="selectedUser"
           :is-user-wizard="isUserWizard"
@@ -966,7 +1038,11 @@ onBeforeUnmount(() => {
           :form-mode="formMode"
           :form="form"
           :selected-form-roles="selectedFormRoles"
-          :filtered-roles="filteredRoles"
+          :filtered-roles="paginatedUserWizardRoles"
+          :role-pagination-page="userRolePaginationPage"
+          :role-pagination-pages="userRolePaginationPages"
+          :role-pagination-total-pages="userRolePaginationTotalPages"
+          :role-pagination-total-items="filteredRoles.length"
           :inherited-permission-ids="inheritedPermissionIds"
           :direct-permission-ids="directPermissionIds"
           :effective-permission-ids-preview="effectivePermissionIdsPreview"
@@ -982,6 +1058,10 @@ onBeforeUnmount(() => {
           :describe-user-roles="describeUserRoles"
           :describe-effective-permission-count="describeEffectivePermissionCount"
           @update:search-term="searchTerm = $event"
+          @update:user-role-filter="userRoleFilter = $event"
+          @update:user-status-filter="userStatusFilter = $event"
+          @update:user-pagination-page="userPaginationPage = $event"
+          @update:role-pagination-page="userRolePaginationPage = $event"
           @create-user="beginCreateUser"
           @edit-user="beginEditUser"
           @open-user-detail="openUserDetail"

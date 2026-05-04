@@ -55,7 +55,7 @@ const router = createRouter({
       meta: {
         section: 'USUARIOS',
         homeTo: '/usuarios/usuarios',
-        pageTitle: 'Nuevo Usuario',
+        pageTitle: 'NUEVO USUARIO',
         userSection: 'usuarios',
         userMode: 'create',
         userStep: 'datos',
@@ -69,7 +69,7 @@ const router = createRouter({
       meta: {
         section: 'USUARIOS',
         homeTo: '/usuarios/usuarios',
-        pageTitle: 'Nuevo Usuario',
+        pageTitle: 'NUEVO USUARIO',
         userSection: 'usuarios',
         userMode: 'create',
         userStep: 'roles',
@@ -83,7 +83,7 @@ const router = createRouter({
       meta: {
         section: 'USUARIOS',
         homeTo: '/usuarios/usuarios',
-        pageTitle: 'Nuevo Usuario',
+        pageTitle: 'NUEVO USUARIO',
         userSection: 'usuarios',
         userMode: 'create',
         userStep: 'permisos',
@@ -97,7 +97,7 @@ const router = createRouter({
       meta: {
         section: 'USUARIOS',
         homeTo: '/usuarios/usuarios',
-        pageTitle: 'Nuevo Usuario',
+        pageTitle: 'NUEVO USUARIO',
         userSection: 'usuarios',
         userMode: 'create',
         userStep: 'resumen',
@@ -111,7 +111,7 @@ const router = createRouter({
       meta: {
         section: 'USUARIOS',
         homeTo: '/usuarios/usuarios',
-        pageTitle: 'Editar Usuario',
+        pageTitle: 'EDITAR USUARIO',
         userSection: 'usuarios',
         userMode: 'edit',
         userStep: 'datos',
@@ -125,7 +125,7 @@ const router = createRouter({
       meta: {
         section: 'USUARIOS',
         homeTo: '/usuarios/usuarios',
-        pageTitle: 'Editar Usuario',
+        pageTitle: 'EDITAR USUARIO',
         userSection: 'usuarios',
         userMode: 'edit',
         userStep: 'roles',
@@ -139,7 +139,7 @@ const router = createRouter({
       meta: {
         section: 'USUARIOS',
         homeTo: '/usuarios/usuarios',
-        pageTitle: 'Editar Usuario',
+        pageTitle: 'EDITAR USUARIO',
         userSection: 'usuarios',
         userMode: 'edit',
         userStep: 'permisos',
@@ -153,7 +153,7 @@ const router = createRouter({
       meta: {
         section: 'USUARIOS',
         homeTo: '/usuarios/usuarios',
-        pageTitle: 'Editar Usuario',
+        pageTitle: 'EDITAR USUARIO',
         userSection: 'usuarios',
         userMode: 'edit',
         userStep: 'resumen',

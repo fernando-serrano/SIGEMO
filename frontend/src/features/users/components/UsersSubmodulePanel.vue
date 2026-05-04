@@ -1,12 +1,24 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
+
 import type { AccessPermission, AccessRole, AccessUser, UserPayload } from '../types'
 
 type WizardStep = { id: 'datos' | 'roles' | 'permisos' | 'resumen'; label: string }
 type PermissionGroup = { moduleName: string; permissions: AccessPermission[] }
+type PermissionReviewItem = { moduleName: string; permission: AccessPermission }
+
+const pendingStatusUser = ref<AccessUser | null>(null)
 
 const props = defineProps<{
   searchTerm: string
+  userRoleFilter: string
+  userStatusFilter: string
+  userRoleOptions: AccessRole[]
   filteredUsers: AccessUser[]
+  userPaginationPage: number
+  userPaginationPages: number[]
+  userPaginationTotalPages: number
+  userPaginationTotalItems: number
   selectedUserId: string | null
   selectedUser: AccessUser | null
   isUserWizard: boolean
@@ -19,6 +31,10 @@ const props = defineProps<{
   form: UserPayload
   selectedFormRoles: AccessRole[]
   filteredRoles: AccessRole[]
+  rolePaginationPage: number
+  rolePaginationPages: number[]
+  rolePaginationTotalPages: number
+  rolePaginationTotalItems: number
   inheritedPermissionIds: string[]
   directPermissionIds: string[]
   effectivePermissionIdsPreview: string[]
@@ -37,6 +53,10 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: 'update:searchTerm', value: string): void
+  (event: 'update:userRoleFilter', value: string): void
+  (event: 'update:userStatusFilter', value: string): void
+  (event: 'update:userPaginationPage', value: number): void
+  (event: 'update:rolePaginationPage', value: number): void
   (event: 'create-user'): void
   (event: 'edit-user', user: AccessUser): void
   (event: 'open-user-detail', user: AccessUser): void
@@ -51,6 +71,24 @@ function updateSearchTerm(event: Event): void {
   emit('update:searchTerm', (event.target as HTMLInputElement).value)
 }
 
+function updateUserRoleFilter(event: Event): void {
+  emit('update:userRoleFilter', (event.target as HTMLSelectElement).value)
+}
+
+function updateUserStatusFilter(event: Event): void {
+  emit('update:userStatusFilter', (event.target as HTMLSelectElement).value)
+}
+
+function goToUserPage(page: number): void {
+  const nextPage = Math.min(Math.max(page, 1), props.userPaginationTotalPages)
+  emit('update:userPaginationPage', nextPage)
+}
+
+function goToRolePage(page: number): void {
+  const nextPage = Math.min(Math.max(page, 1), props.rolePaginationTotalPages)
+  emit('update:rolePaginationPage', nextPage)
+}
+
 function toggleSelection(collection: string[], value: string): string[] {
   return collection.includes(value) ? collection.filter((item) => item !== value) : [...collection, value]
 }
@@ -61,6 +99,28 @@ function toggleFormRole(roleId: string): void {
 
 function toggleFormPermission(permissionId: string): void {
   props.form.permission_ids = toggleSelection(props.form.permission_ids, permissionId)
+}
+
+function requestUserStatusToggle(user: AccessUser): void {
+  if (!user.is_active) {
+    emit('toggle-user-active', user)
+    return
+  }
+
+  pendingStatusUser.value = user
+}
+
+function closeStatusModal(): void {
+  pendingStatusUser.value = null
+}
+
+function confirmUserStatusToggle(): void {
+  if (!pendingStatusUser.value) {
+    return
+  }
+
+  emit('toggle-user-active', pendingStatusUser.value)
+  pendingStatusUser.value = null
 }
 
 function getStepMeta(stepId: WizardStep['id']): string {
@@ -80,27 +140,44 @@ function getUserRoleBadges(user: AccessUser | null): string[] {
     .map((value) => value.trim())
     .filter(Boolean)
 }
+
+const effectivePermissionReviewItems = computed<PermissionReviewItem[]>(() =>
+  props.effectivePermissionsByModule.flatMap((group) =>
+    group.permissions.map((permission) => ({
+      moduleName: group.moduleName,
+      permission,
+    })),
+  ),
+)
 </script>
 
 <template>
   <section v-if="!isUserWizard" class="users-list-layout">
     <section class="card card--acrylic tracking-card users-table-card" aria-label="Listado de usuarios">
-      <header class="card__header tracking-card-header--space-between">
-        <div>
-          <p class="card__header-title tracking-card-title">USUARIOS</p>
-          <p class="users-card-copy">Vista compacta para revisar usuarios activos, roles y acciones rapidas.</p>
-        </div>
-
-        <button type="button" class="btn btn--primary btn--sm" @click="emit('create-user')">
-          Nuevo usuario
-        </button>
-      </header>
-
       <div class="card__body users-table-body">
-        <label class="tracking-field">
-          <span class="input-label">Buscar usuario</span>
-          <input :value="searchTerm" class="input input--sm" type="text" placeholder="Usuario, nombre, correo o area" @input="updateSearchTerm" />
-        </label>
+        <div class="users-filter-row">
+          <label class="tracking-field users-filter-search">
+            <span class="input-label">Buscar usuario</span>
+            <input :value="searchTerm" class="input input--sm" type="text" placeholder="Usuario, nombre, correo o area" @input="updateSearchTerm" />
+          </label>
+
+          <label class="tracking-field">
+            <span class="input-label">Rol</span>
+            <select :value="userRoleFilter" class="select select--sm" @change="updateUserRoleFilter">
+              <option value="">Todos los roles</option>
+              <option v-for="role in userRoleOptions" :key="role.id" :value="role.id">{{ role.nombre }}</option>
+            </select>
+          </label>
+
+          <label class="tracking-field">
+            <span class="input-label">Estado</span>
+            <select :value="userStatusFilter" class="select select--sm" @change="updateUserStatusFilter">
+              <option value="">Todos los estados</option>
+              <option value="active">Activos</option>
+              <option value="inactive">Inactivos</option>
+            </select>
+          </label>
+        </div>
 
         <div class="tracking-table-wrap users-table-wrap">
           <table class="table table--compact table--hoverable tracking-table tracking-table--borderless users-table">
@@ -159,6 +236,44 @@ function getUserRoleBadges(user: AccessUser | null): string[] {
             </tbody>
           </table>
         </div>
+
+        <div class="users-table-footer">
+          <nav v-if="userPaginationTotalItems > 0" class="pagination pagination--sm users-pagination" aria-label="Paginacion de usuarios">
+            <button
+              type="button"
+              class="btn btn--ghost btn--sm"
+              :disabled="userPaginationPage === 1"
+              @click="goToUserPage(userPaginationPage - 1)"
+            >
+              Anterior
+            </button>
+
+            <button
+              v-for="page in userPaginationPages"
+              :key="`users-page-${page}`"
+              type="button"
+              class="btn btn--sm"
+              :class="page === userPaginationPage ? 'btn--primary' : 'btn--ghost'"
+              :aria-current="page === userPaginationPage ? 'page' : undefined"
+              @click="goToUserPage(page)"
+            >
+              {{ page }}
+            </button>
+
+            <button
+              type="button"
+              class="btn btn--ghost btn--sm"
+              :disabled="userPaginationPage === userPaginationTotalPages"
+              @click="goToUserPage(userPaginationPage + 1)"
+            >
+              Siguiente
+            </button>
+          </nav>
+
+          <button type="button" class="btn btn--primary btn--sm users-create-button" @click="emit('create-user')">
+            Nuevo usuario
+          </button>
+        </div>
       </div>
     </section>
 
@@ -167,7 +282,11 @@ function getUserRoleBadges(user: AccessUser | null): string[] {
         <template v-if="selectedUser">
           <div class="users-detail-header">
             <p class="users-detail-name">{{ selectedUser.fullname || selectedUser.username }}</p>
-            <span class="users-detail-status" :title="selectedUser.is_active ? 'Activo' : 'Inactivo'">
+            <span
+              class="users-detail-status"
+              :class="selectedUser.is_active ? 'users-detail-status--active' : 'users-detail-status--inactive'"
+              :title="selectedUser.is_active ? 'Activo' : 'Inactivo'"
+            >
               <span class="status-dot" :class="selectedUser.is_active ? '' : 'status-dot--offline'" aria-hidden="true" />
               <span>{{ selectedUser.is_active ? 'Activo' : 'Inactivo' }}</span>
             </span>
@@ -185,7 +304,7 @@ function getUserRoleBadges(user: AccessUser | null): string[] {
             <article class="users-detail-item">
               <span class="users-detail-label">Area</span>
               <span class="users-detail-badges">
-                <span v-if="selectedUser.area" class="badge badge--sm badge--info badge--outline">{{ selectedUser.area }}</span>
+                <span v-if="selectedUser.area" class="badge badge--info">{{ selectedUser.area }}</span>
                 <span v-else class="users-detail-value">-</span>
               </span>
             </article>
@@ -195,7 +314,7 @@ function getUserRoleBadges(user: AccessUser | null): string[] {
                 <span
                   v-for="roleLabel in getUserRoleBadges(selectedUser)"
                   :key="`${selectedUser.id}-detail-${roleLabel}`"
-                  class="badge badge--sm badge--secondary badge--outline"
+                  class="badge badge--secondary"
                 >
                   {{ roleLabel }}
                 </span>
@@ -205,9 +324,14 @@ function getUserRoleBadges(user: AccessUser | null): string[] {
           </div>
 
           <div class="users-detail-actions">
-            <button type="button" class="btn btn--primary" @click="emit('edit-user', selectedUser)">Editar usuario</button>
-            <button type="button" class="btn btn--ghost" @click="emit('toggle-user-active', selectedUser)">
-              {{ selectedUser.is_active ? 'Desactivar usuario' : 'Activar usuario' }}
+            <button type="button" class="btn btn--primary btn--sm" @click="emit('edit-user', selectedUser)">Editar</button>
+            <button
+              type="button"
+              class="btn btn--ghost btn--sm"
+              :class="selectedUser.is_active ? 'users-action-danger' : ''"
+              @click="requestUserStatusToggle(selectedUser)"
+            >
+              {{ selectedUser.is_active ? 'Desactivar' : 'Activar' }}
             </button>
           </div>
         </template>
@@ -217,30 +341,42 @@ function getUserRoleBadges(user: AccessUser | null): string[] {
         </div>
       </div>
     </section>
+
+    <div v-if="pendingStatusUser" class="modal-overlay modal-overlay--open">
+      <section class="modal modal--danger" role="dialog" aria-modal="true" aria-labelledby="users-disable-title">
+        <header class="modal__header">
+          <p id="users-disable-title" class="modal__title">Deshabilitar usuario</p>
+          <button type="button" class="modal__close" aria-label="Cerrar" @click="closeStatusModal">
+            <span aria-hidden="true">×</span>
+          </button>
+        </header>
+
+        <div class="modal__body">
+          <p>
+            Se deshabilitara a <strong>{{ pendingStatusUser.fullname || pendingStatusUser.username }}</strong>.
+            El usuario no deberia poder operar hasta que sea activado nuevamente.
+          </p>
+        </div>
+
+        <footer class="modal__footer">
+          <button type="button" class="btn btn--outline btn--sm" @click="closeStatusModal">Cancelar</button>
+          <button type="button" class="btn btn--danger btn--sm" @click="confirmUserStatusToggle">Deshabilitar</button>
+        </footer>
+      </section>
+    </div>
   </section>
 
   <section v-else class="card card--acrylic tracking-card users-wizard-card" aria-label="Flujo de usuario">
-    <header class="card__header tracking-card-header--space-between">
-      <div>
-        <p class="card__header-title tracking-card-title">{{ wizardTitle }}</p>
-        <p class="users-card-copy">
-          Paso {{ currentWizardStepIndex + 1 }} de {{ userWizardSteps.length }} para
-          {{ userViewMode === 'create' ? 'registrar' : 'actualizar' }} un usuario.
-        </p>
-      </div>
-
-      <button type="button" class="btn btn--ghost btn--sm" @click="emit('cancel-user-wizard')">
-        Volver al listado
-      </button>
-    </header>
-
     <div class="card__body users-wizard-body">
       <div class="users-stage-header">
         <span class="badge badge--info badge--pill">Paso {{ currentWizardStepIndex + 1 }} de {{ userWizardSteps.length }}</span>
-        <span class="users-stage-copy">Flujo guiado de alta y edicion de usuario</span>
       </div>
 
-      <div class="phase-stepper" aria-label="Etapas del flujo de usuario">
+      <div
+        class="phase-stepper"
+        :class="`phase-stepper--step-${currentWizardStepIndex}`"
+        aria-label="Etapas del flujo de usuario"
+      >
         <div
           v-for="(step, index) in userWizardSteps"
           :key="step.id"
@@ -284,11 +420,13 @@ function getUserRoleBadges(user: AccessUser | null): string[] {
       <div v-if="userStep === 'datos'" class="users-form-body">
         <section class="users-access-panel">
           <div class="users-access-header">
-            <p class="users-access-title">Datos base</p>
-            <p class="users-access-copy">Completa la informacion principal del usuario antes de definir accesos.</p>
+            <p class="users-access-title users-access-title--inline">
+              Datos base:
+              <span class="users-access-copy">Completa la informacion principal del usuario antes de definir accesos.</span>
+            </p>
           </div>
 
-          <div class="users-form-grid">
+          <div class="users-form-grid users-form-grid--datos">
             <label class="tracking-field">
               <span class="input-label">Username</span>
               <input
@@ -298,7 +436,6 @@ function getUserRoleBadges(user: AccessUser | null): string[] {
                 type="text"
                 placeholder="usuario.sigemo"
               />
-              <span v-if="userValidationAttempted && userFormErrors.username" class="input-help input-help--error">{{ userFormErrors.username }}</span>
             </label>
 
             <label class="tracking-field">
@@ -309,43 +446,6 @@ function getUserRoleBadges(user: AccessUser | null): string[] {
                 type="text"
                 :placeholder="formMode === 'create' ? 'Si no ingresas, se usara el username' : 'Opcional para mantener la actual'"
               />
-              <span class="input-help">Opcional. Si queda vacio, se usara el username.</span>
-            </label>
-
-            <label class="tracking-field">
-              <span class="input-label">Nombres</span>
-              <input
-                v-model="form.name"
-                class="input input--sm"
-                :class="{ 'input--error': userValidationAttempted && userFormErrors.name }"
-                type="text"
-                placeholder="Fernando Jesus"
-              />
-              <span v-if="userValidationAttempted && userFormErrors.name" class="input-help input-help--error">{{ userFormErrors.name }}</span>
-            </label>
-
-            <label class="tracking-field">
-              <span class="input-label">Apellidos</span>
-              <input
-                v-model="form.last_name"
-                class="input input--sm"
-                :class="{ 'input--error': userValidationAttempted && userFormErrors.last_name }"
-                type="text"
-                placeholder="Serrano Garrido"
-              />
-              <span v-if="userValidationAttempted && userFormErrors.last_name" class="input-help input-help--error">{{ userFormErrors.last_name }}</span>
-            </label>
-
-            <label class="tracking-field">
-              <span class="input-label">Correo</span>
-              <input
-                v-model="form.email"
-                class="input input--sm"
-                :class="{ 'input--error': userValidationAttempted && userFormErrors.email }"
-                type="email"
-                placeholder="correo@liderman.com.pe"
-              />
-              <span v-if="userValidationAttempted && userFormErrors.email" class="input-help input-help--error">{{ userFormErrors.email }}</span>
             </label>
 
             <label class="tracking-field">
@@ -357,30 +457,67 @@ function getUserRoleBadges(user: AccessUser | null): string[] {
                 type="text"
                 placeholder="Operaciones, RRHH, SSO..."
               />
-              <span v-if="userValidationAttempted && userFormErrors.area" class="input-help input-help--error">{{ userFormErrors.area }}</span>
+            </label>
+
+            <label class="tracking-field">
+              <span class="input-label">Nombres</span>
+              <input
+                v-model="form.name"
+                class="input input--sm"
+                :class="{ 'input--error': userValidationAttempted && userFormErrors.name }"
+                type="text"
+                placeholder="Fernando Jesus"
+              />
+            </label>
+
+            <label class="tracking-field">
+              <span class="input-label">Apellidos</span>
+              <input
+                v-model="form.last_name"
+                class="input input--sm"
+                :class="{ 'input--error': userValidationAttempted && userFormErrors.last_name }"
+                type="text"
+                placeholder="Serrano Garrido"
+              />
+            </label>
+
+            <label class="tracking-field">
+              <span class="input-label">Correo</span>
+              <input
+                v-model="form.email"
+                class="input input--sm"
+                :class="{ 'input--error': userValidationAttempted && userFormErrors.email }"
+                type="email"
+                placeholder="correo@liderman.com.pe"
+              />
             </label>
           </div>
 
-          <label class="users-toggle">
-            <input v-model="form.is_active" type="checkbox" />
-            <span>Usuario activo</span>
+          <label class="users-toggle toggle toggle--success">
+            <input v-model="form.is_active" class="toggle__input" type="checkbox" />
+            <span class="toggle__track" aria-hidden="true">
+              <span class="toggle__thumb" />
+            </span>
+            <span class="toggle__label">Usuario activo</span>
           </label>
         </section>
       </div>
 
       <div v-else-if="userStep === 'roles'" class="users-form-body">
-        <section class="users-access-panel users-access-panel--summary">
+        <section class="users-access-panel users-access-panel--summary users-access-panel--summary-inline">
           <div class="users-access-header">
-            <p class="users-access-title">Roles del usuario</p>
-            <p class="users-access-copy">Selecciona los roles base que definiran el acceso heredado del usuario.</p>
+            <p class="users-access-title users-access-title--inline">
+              Roles del usuario:
+              <span class="users-access-copy">Selecciona los roles base que definiran el acceso heredado del usuario.</span>
+            </p>
           </div>
 
-          <div class="users-access-summary-grid">
-            <article class="users-access-summary-card">
+          <div class="users-access-summary-strip">
+            <article class="users-access-summary-card users-access-summary-card--compact">
               <span class="users-access-summary-value">{{ selectedFormRoles.length }}</span>
               <span class="users-access-summary-label">Roles base</span>
             </article>
-            <article class="users-access-summary-card">
+            <article class="users-access-summary-card users-access-summary-card--compact">
               <span class="users-access-summary-value">{{ inheritedPermissionIds.length }}</span>
               <span class="users-access-summary-label">Permisos heredados</span>
             </article>
@@ -397,10 +534,16 @@ function getUserRoleBadges(user: AccessUser | null): string[] {
             <label
               v-for="role in filteredRoles"
               :key="role.id"
-              class="users-role-choice"
+              class="users-role-choice checkbox"
               :class="{ 'users-role-choice--active': form.role_ids.includes(role.id) }"
             >
-              <input :checked="form.role_ids.includes(role.id)" type="checkbox" @change="toggleFormRole(role.id)" />
+              <input
+                :checked="form.role_ids.includes(role.id)"
+                class="checkbox__input"
+                type="checkbox"
+                @change="toggleFormRole(role.id)"
+              />
+              <span class="checkbox__box" aria-hidden="true" />
               <span class="users-role-choice-copy">
                 <span class="users-role-choice-name">{{ role.nombre }}</span>
                 <span class="users-role-choice-meta">{{ role.codigo }}</span>
@@ -408,6 +551,38 @@ function getUserRoleBadges(user: AccessUser | null): string[] {
               </span>
             </label>
           </div>
+
+          <nav v-if="rolePaginationTotalItems > 0" class="pagination pagination--sm users-pagination users-pagination--roles" aria-label="Paginacion de roles">
+            <button
+              type="button"
+              class="btn btn--ghost btn--sm"
+              :disabled="rolePaginationPage === 1"
+              @click="goToRolePage(rolePaginationPage - 1)"
+            >
+              Anterior
+            </button>
+
+            <button
+              v-for="page in rolePaginationPages"
+              :key="`roles-page-${page}`"
+              type="button"
+              class="btn btn--sm"
+              :class="page === rolePaginationPage ? 'btn--primary' : 'btn--ghost'"
+              :aria-current="page === rolePaginationPage ? 'page' : undefined"
+              @click="goToRolePage(page)"
+            >
+              {{ page }}
+            </button>
+
+            <button
+              type="button"
+              class="btn btn--ghost btn--sm"
+              :disabled="rolePaginationPage === rolePaginationTotalPages"
+              @click="goToRolePage(rolePaginationPage + 1)"
+            >
+              Siguiente
+            </button>
+          </nav>
         </section>
       </div>
 
@@ -464,59 +639,42 @@ function getUserRoleBadges(user: AccessUser | null): string[] {
         </section>
       </div>
 
-      <div v-else class="users-form-body">
-        <section class="users-access-panel users-access-panel--summary">
-          <div class="users-access-header">
-            <p class="users-access-title">Resumen final</p>
-            <p class="users-access-copy">Antes de confirmar, revisa los datos, roles y permisos efectivos del usuario.</p>
-          </div>
+      <div v-else class="users-form-body users-review-body">
+        <section class="users-review-overview">
+          <div class="users-review-user">
+            <span class="users-review-kicker">Confirmacion</span>
+            <span class="users-review-name-row">
+              <span class="users-review-name">{{ [form.name, form.last_name].filter(Boolean).join(' ') || form.username || '-' }}</span>
+              <span v-for="role in selectedFormRoles" :key="`review-role-${role.id}`" class="badge badge--secondary">
+                {{ role.nombre }}
+              </span>
+            </span>
 
-          <div class="users-access-summary-grid">
-            <article class="users-access-summary-card">
-              <span class="users-access-summary-value">{{ selectedFormRoles.length }}</span>
-              <span class="users-access-summary-label">Roles</span>
-            </article>
-            <article class="users-access-summary-card">
-              <span class="users-access-summary-value">{{ inheritedPermissionIds.length }}</span>
-              <span class="users-access-summary-label">Heredados</span>
-            </article>
-            <article class="users-access-summary-card">
-              <span class="users-access-summary-value">{{ directPermissionIds.length }}</span>
-              <span class="users-access-summary-label">Directos</span>
-            </article>
-            <article class="users-access-summary-card">
-              <span class="users-access-summary-value">{{ effectivePermissionIdsPreview.length }}</span>
-              <span class="users-access-summary-label">Efectivos</span>
-            </article>
-          </div>
-        </section>
-
-        <section class="users-access-panel">
-          <div class="users-access-header">
-            <p class="users-access-title">Ficha del usuario</p>
-          </div>
-
-          <div class="users-detail-grid">
-            <article class="users-detail-item">
-              <span class="users-detail-label">Username</span>
-              <span class="users-detail-value">{{ form.username || '-' }}</span>
-            </article>
-            <article class="users-detail-item">
-              <span class="users-detail-label">Nombre completo</span>
-              <span class="users-detail-value">{{ [form.name, form.last_name].filter(Boolean).join(' ') || '-' }}</span>
-            </article>
-            <article class="users-detail-item">
-              <span class="users-detail-label">Correo</span>
-              <span class="users-detail-value">{{ form.email || '-' }}</span>
-            </article>
-            <article class="users-detail-item">
-              <span class="users-detail-label">Area</span>
-              <span class="users-detail-value">{{ form.area || '-' }}</span>
-            </article>
+            <span class="users-review-tags">
+              <span class="users-review-tag">
+                <span>Username</span>
+                <strong>{{ form.username || '-' }}</strong>
+              </span>
+              <span class="users-review-tag">
+                <span>Correo</span>
+                <strong>{{ form.email || '-' }}</strong>
+              </span>
+              <span class="users-review-tag">
+                <span>Area</span>
+                <strong>{{ form.area || '-' }}</strong>
+              </span>
+              <span class="users-review-tag">
+                <span>Acceso</span>
+                <strong>
+                  {{ selectedFormRoles.length }} rol{{ selectedFormRoles.length === 1 ? '' : 'es' }} /
+                  {{ effectivePermissionIdsPreview.length }} permiso{{ effectivePermissionIdsPreview.length === 1 ? '' : 's' }}
+                </strong>
+              </span>
+            </span>
           </div>
         </section>
 
-        <section class="users-access-panel">
+        <section class="users-access-panel users-review-permissions">
           <div class="users-access-header">
             <p class="users-access-title">Permisos efectivos</p>
           </div>
@@ -525,46 +683,37 @@ function getUserRoleBadges(user: AccessUser | null): string[] {
             Aun no hay permisos efectivos asignados para este usuario.
           </div>
 
-          <div class="users-permission-groups">
-            <section v-for="group in effectivePermissionsByModule" :key="group.moduleName" class="users-permission-group">
-              <header class="users-permission-group-header">
-                <p class="users-permission-group-title">{{ group.moduleName }}</p>
-              </header>
-
-              <div class="users-chip-grid">
-                <article v-for="permission in group.permissions" :key="permission.id" class="users-chip users-chip--readonly">
-                  <span class="users-chip-copy">
-                    <span>{{ permission.nombre }}</span>
-                    <span class="users-chip-meta">{{ permission.codigo }}</span>
-                  </span>
-                  <span
-                    class="badge badge--sm"
-                    :class="inheritedPermissionIds.includes(permission.id) ? 'badge--secondary' : 'badge--info'"
-                  >
-                    {{ inheritedPermissionIds.includes(permission.id) ? 'Rol' : 'Directo' }}
-                  </span>
-                </article>
-              </div>
-            </section>
+          <div class="users-review-chip-grid">
+            <article v-for="item in effectivePermissionReviewItems" :key="item.permission.id" class="users-chip users-chip--readonly users-chip--compact">
+              <span class="users-chip-copy">
+                <span>{{ item.permission.nombre }}</span>
+                <span class="users-chip-meta">
+                  {{ item.permission.codigo }} - {{ inheritedPermissionIds.includes(item.permission.id) ? 'Heredado' : 'Directo' }}
+                </span>
+              </span>
+              <span class="badge badge--sm badge--info">
+                {{ item.moduleName }}
+              </span>
+            </article>
           </div>
         </section>
       </div>
 
-      <div v-if="userFeedback" class="alert" :class="`alert--${userFeedbackTone}`" role="alert">
-        <div class="alert__icon" aria-hidden="true">
-          <span v-if="userFeedbackTone === 'success'">✓</span>
-          <span v-else-if="userFeedbackTone === 'warning'">!</span>
-          <span v-else-if="userFeedbackTone === 'danger'">×</span>
-          <span v-else>i</span>
-        </div>
-        <div class="alert__content">
-          <div class="alert__title">Validacion</div>
-          <div class="alert__message">{{ userFeedback }}</div>
-        </div>
-      </div>
-
-      <div class="users-form-actions users-form-actions--space-between">
-        <button type="button" class="btn btn--ghost" @click="emit('previous-wizard-step')">
+      <div class="users-form-actions">
+        <button
+          v-if="currentWizardStepIndex > 0"
+          type="button"
+          class="btn btn--ghost users-action-danger"
+          @click="emit('cancel-user-wizard')"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          class="btn"
+          :class="currentWizardStepIndex === 0 ? 'btn--ghost users-action-danger' : 'btn--ghost'"
+          @click="emit('previous-wizard-step')"
+        >
           {{ wizardSecondaryLabel }}
         </button>
         <button type="button" class="btn btn--primary" :disabled="isSavingUser" @click="emit('primary-wizard-action')">
