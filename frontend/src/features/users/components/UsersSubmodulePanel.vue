@@ -545,9 +545,29 @@ const effectivePermissionReviewItems = computed<PermissionReviewItem[]>(() =>
               />
               <span class="checkbox__box" aria-hidden="true" />
               <span class="users-role-choice-copy">
-                <span class="users-role-choice-name">{{ role.nombre }}</span>
+                <span class="users-role-choice-heading">
+                  <span class="users-role-choice-name">{{ role.nombre }}</span>
+                  <span class="users-role-choice-status" :class="role.estado ? 'users-role-choice-status--active' : 'users-role-choice-status--inactive'">
+                    <span class="status-dot" :class="role.estado ? '' : 'status-dot--offline'" aria-hidden="true" />
+                    <span>{{ role.estado ? 'Activo' : 'Inactivo' }}</span>
+                  </span>
+                </span>
                 <span class="users-role-choice-meta">{{ role.codigo }}</span>
                 <span v-if="role.descripcion" class="users-role-choice-description">{{ role.descripcion }}</span>
+                <span class="users-role-choice-tags">
+                  <span class="badge badge--sm badge--info">
+                    {{ role.permission_ids.length }} permiso{{ role.permission_ids.length === 1 ? '' : 's' }}
+                  </span>
+                  <span class="badge badge--sm badge--secondary users-role-user-count" :title="`${role.user_ids.length} usuario${role.user_ids.length === 1 ? '' : 's'}`">
+                    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path
+                        d="M8 8.2A2.85 2.85 0 1 0 8 2.5a2.85 2.85 0 0 0 0 5.7Zm0 1.55c-2.56 0-4.64 1.4-4.64 3.12v.63h9.28v-.63c0-1.72-2.08-3.12-4.64-3.12Z"
+                        fill="currentColor"
+                      />
+                    </svg>
+                    <span>{{ role.user_ids.length }}</span>
+                  </span>
+                </span>
               </span>
             </label>
           </div>
@@ -621,16 +641,39 @@ const effectivePermissionReviewItems = computed<PermissionReviewItem[]>(() =>
                 <p class="users-permission-group-title">{{ group.moduleName }}</p>
               </header>
 
-              <div class="users-chip-grid">
-                <label v-for="permission in group.permissions" :key="permission.id" class="users-chip">
+              <div class="users-role-selector-grid">
+                <label
+                  v-for="permission in group.permissions"
+                  :key="permission.id"
+                  class="users-permission-choice checkbox"
+                  :class="{ 'users-permission-choice--active': directPermissionIds.includes(permission.id) }"
+                >
                   <input
                     :checked="directPermissionIds.includes(permission.id)"
+                    class="checkbox__input"
                     type="checkbox"
                     @change="toggleFormPermission(permission.id)"
                   />
-                  <span class="users-chip-copy">
-                    <span>{{ permission.nombre }}</span>
-                    <span class="users-chip-meta">{{ permission.codigo }}</span>
+                  <span class="checkbox__box" aria-hidden="true" />
+                  <span class="users-permission-choice-copy">
+                    <span class="users-permission-choice-heading">
+                      <span class="users-permission-choice-title-row">
+                        <span class="users-permission-choice-name">{{ permission.nombre }}</span>
+                        <span class="users-chip-meta">{{ permission.codigo }}</span>
+                      </span>
+                      <span
+                        class="users-role-choice-status"
+                        :class="permission.estado ? 'users-role-choice-status--active' : 'users-role-choice-status--inactive'"
+                      >
+                        <span class="status-dot" :class="permission.estado ? '' : 'status-dot--offline'" aria-hidden="true" />
+                        <span>{{ permission.estado ? 'Activo' : 'Inactivo' }}</span>
+                      </span>
+                    </span>
+                    <span v-if="permission.descripcion" class="users-role-choice-description">{{ permission.descripcion }}</span>
+                    <span class="users-role-choice-tags">
+                      <span v-if="permission.modulo" class="badge badge--sm badge--info">{{ permission.modulo }}</span>
+                      <span v-if="permission.accion" class="badge badge--sm badge--secondary">{{ permission.accion }}</span>
+                    </span>
                   </span>
                 </label>
               </div>
@@ -684,15 +727,26 @@ const effectivePermissionReviewItems = computed<PermissionReviewItem[]>(() =>
           </div>
 
           <div class="users-review-chip-grid">
-            <article v-for="item in effectivePermissionReviewItems" :key="item.permission.id" class="users-chip users-chip--readonly users-chip--compact">
-              <span class="users-chip-copy">
-                <span>{{ item.permission.nombre }}</span>
-                <span class="users-chip-meta">
-                  {{ item.permission.codigo }} - {{ inheritedPermissionIds.includes(item.permission.id) ? 'Heredado' : 'Directo' }}
+            <article
+              v-for="item in effectivePermissionReviewItems"
+              :key="item.permission.id"
+              class="users-permission-choice users-permission-choice--readonly"
+            >
+              <span class="users-permission-choice-copy">
+                <span class="users-permission-choice-heading">
+                  <span class="users-permission-choice-title-row">
+                    <span class="users-permission-choice-name">{{ item.permission.nombre }}</span>
+                    <span class="users-chip-meta">{{ item.permission.codigo }}</span>
+                  </span>
+                  <span class="badge badge--sm" :class="inheritedPermissionIds.includes(item.permission.id) ? 'badge--info' : 'badge--secondary'">
+                    {{ inheritedPermissionIds.includes(item.permission.id) ? 'Heredado' : 'Directo' }}
+                  </span>
                 </span>
-              </span>
-              <span class="badge badge--sm badge--info">
-                {{ item.moduleName }}
+                <span v-if="item.permission.descripcion" class="users-role-choice-description">{{ item.permission.descripcion }}</span>
+                <span class="users-role-choice-tags">
+                  <span class="badge badge--sm badge--info">{{ item.moduleName }}</span>
+                  <span v-if="item.permission.accion" class="badge badge--sm badge--secondary">{{ item.permission.accion }}</span>
+                </span>
               </span>
             </article>
           </div>

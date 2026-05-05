@@ -109,12 +109,42 @@ const permissionForm = reactive<PermissionPayload>({
   user_ids: [],
 })
 
-const summary = computed(() => ({
-  users: catalog.users.length,
-  activeUsers: catalog.users.filter((user) => user.is_active).length,
-  roles: catalog.roles.length,
-  permissions: catalog.permissions.length,
-}))
+const selectedRole = computed(() => catalog.roles.find((role) => role.id === selectedRoleId.value) ?? null)
+const selectedPermission = computed(() => catalog.permissions.find((permission) => permission.id === selectedPermissionId.value) ?? null)
+
+function getRoleAssignedUsers(roleId: string): AccessUser[] {
+  return catalog.users.filter((user) => user.role_ids.includes(roleId))
+}
+
+const summaryCards = computed(() => {
+  if (activeSection.value === 'roles' && selectedRole.value) {
+    const assignedUsers = getRoleAssignedUsers(selectedRole.value.id)
+    const activeAssignedUsers = assignedUsers.filter((user) => user.is_active).length
+
+    return [
+      { value: assignedUsers.length, label: 'Usuarios del rol' },
+      { value: activeAssignedUsers, label: 'Usuarios activos' },
+      { value: selectedRole.value.permission_ids.length, label: 'Permisos base' },
+      { value: selectedRole.value.estado ? 'Activo' : 'Inactivo', label: 'Estado del rol' },
+    ]
+  }
+
+  if (activeSection.value === 'permisos' && selectedPermission.value) {
+    return [
+      { value: selectedPermission.value.role_ids.length, label: 'Roles asociados' },
+      { value: selectedPermission.value.user_ids.length, label: 'Usuarios directos' },
+      { value: selectedPermission.value.modulo || 'General', label: 'Modulo del permiso' },
+      { value: selectedPermission.value.estado ? 'Activo' : 'Inactivo', label: 'Estado del permiso' },
+    ]
+  }
+
+  return [
+    { value: catalog.users.length, label: 'Usuarios registrados' },
+    { value: catalog.users.filter((user) => user.is_active).length, label: 'Usuarios activos' },
+    { value: catalog.roles.length, label: 'Roles configurados' },
+    { value: catalog.permissions.length, label: 'Permisos disponibles' },
+  ]
+})
 
 const activeSection = computed<'usuarios' | 'roles' | 'permisos'>(() => {
   const section = String(route.meta.userSection ?? 'usuarios').trim()
@@ -198,15 +228,22 @@ watch(userPaginationTotalPages, (totalPages) => {
 
 const filteredRoles = computed(() => {
   const query = roleSearchTerm.value.trim().toLowerCase()
-  const roles = [...catalog.roles].sort((left, right) => left.nombre.localeCompare(right.nombre))
+  const roles = [...catalog.roles]
 
-  if (!query) {
-    return roles
-  }
+  const filtered = !query
+    ? roles
+    : roles.filter((role) =>
+        [role.codigo, role.nombre, role.descripcion].join(' ').toLowerCase().includes(query),
+      )
 
-  return roles.filter((role) =>
-    [role.codigo, role.nombre, role.descripcion].join(' ').toLowerCase().includes(query),
-  )
+  return filtered.sort((left, right) => {
+    const userCountDifference = getRoleAssignedUsers(right.id).length - getRoleAssignedUsers(left.id).length
+    if (userCountDifference !== 0) {
+      return userCountDifference
+    }
+
+    return left.nombre.localeCompare(right.nombre)
+  })
 })
 
 const userRolePageSize = 9
@@ -234,20 +271,25 @@ watch(userRolePaginationTotalPages, (totalPages) => {
 
 const filteredPermissions = computed(() => {
   const query = permissionSearchTerm.value.trim().toLowerCase()
-  const permissions = [...catalog.permissions].sort((left, right) =>
-    [left.modulo, left.nombre].join(' ').localeCompare([right.modulo, right.nombre].join(' ')),
-  )
+  const permissions = [...catalog.permissions]
 
-  if (!query) {
-    return permissions
-  }
+  const filtered = !query
+    ? permissions
+    : permissions.filter((permission) =>
+        [permission.codigo, permission.nombre, permission.modulo, permission.accion, permission.descripcion]
+          .join(' ')
+          .toLowerCase()
+          .includes(query),
+      )
 
-  return permissions.filter((permission) =>
-    [permission.codigo, permission.nombre, permission.modulo, permission.accion, permission.descripcion]
-      .join(' ')
-      .toLowerCase()
-      .includes(query),
-  )
+  return filtered.sort((left, right) => {
+    const associationDiff = right.role_ids.length + right.user_ids.length - (left.role_ids.length + left.user_ids.length)
+    if (associationDiff !== 0) {
+      return associationDiff
+    }
+
+    return [left.modulo, left.nombre].join(' ').localeCompare([right.modulo, right.nombre].join(' '))
+  })
 })
 
 const selectedUser = computed(() => catalog.users.find((user) => user.id === selectedUserId.value) ?? null)
@@ -809,6 +851,7 @@ async function saveRole(): Promise<void> {
   if (hasRoleFormErrors()) {
     roleFeedbackTone.value = 'warning'
     roleFeedback.value = 'Completa codigo y nombre antes de guardar el rol.'
+    pushToast('Validacion', roleFeedback.value, 'warning')
     isSavingRole.value = false
     return
   }
@@ -855,6 +898,7 @@ async function savePermission(): Promise<void> {
   if (hasPermissionFormErrors()) {
     permissionFeedbackTone.value = 'warning'
     permissionFeedback.value = 'Completa codigo, nombre, modulo y accion antes de guardar el permiso.'
+    pushToast('Validacion', permissionFeedback.value, 'warning')
     isSavingPermission.value = false
     return
   }
@@ -973,33 +1017,12 @@ onBeforeUnmount(() => {
       <div
         v-if="!(activeSection === 'usuarios' && isUserWizard)"
         class="users-summary-grid"
-        :class="{ 'users-summary-grid--compact': activeSection === 'usuarios' && !isUserWizard }"
+        :class="{ 'users-summary-grid--compact': !isUserWizard }"
       >
-        <article class="card card--acrylic tracking-card users-summary-card">
+        <article v-for="card in summaryCards" :key="card.label" class="card card--acrylic tracking-card users-summary-card">
           <div class="card__body">
-            <p class="users-summary-value">{{ summary.users }}</p>
-            <p class="users-summary-label">Usuarios registrados</p>
-          </div>
-        </article>
-
-        <article class="card card--acrylic tracking-card users-summary-card">
-          <div class="card__body">
-            <p class="users-summary-value">{{ summary.activeUsers }}</p>
-            <p class="users-summary-label">Usuarios activos</p>
-          </div>
-        </article>
-
-        <article class="card card--acrylic tracking-card users-summary-card">
-          <div class="card__body">
-            <p class="users-summary-value">{{ summary.roles }}</p>
-            <p class="users-summary-label">Roles configurados</p>
-          </div>
-        </article>
-
-        <article class="card card--acrylic tracking-card users-summary-card">
-          <div class="card__body">
-            <p class="users-summary-value">{{ summary.permissions }}</p>
-            <p class="users-summary-label">Permisos disponibles</p>
+            <p class="users-summary-value">{{ card.value }}</p>
+            <p class="users-summary-label">{{ card.label }}</p>
           </div>
         </article>
       </div>
@@ -1081,6 +1104,7 @@ onBeforeUnmount(() => {
           :role-form-mode="roleFormMode"
           :role-form="roleForm"
           :sorted-users="sortedUsers"
+          :role-options="userRoleOptions"
           :permissions-by-module="permissionsByModule"
           :role-feedback="roleFeedback"
           :role-feedback-tone="roleFeedbackTone"
@@ -1099,6 +1123,7 @@ onBeforeUnmount(() => {
           :permission-search-term="permissionSearchTerm"
           :filtered-permissions="filteredPermissions"
           :filtered-roles="filteredRoles"
+          :role-options="userRoleOptions"
           :sorted-users="sortedUsers"
           :selected-permission-id="selectedPermissionId"
           :permission-form-mode="permissionFormMode"
