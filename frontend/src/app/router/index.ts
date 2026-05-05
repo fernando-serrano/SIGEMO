@@ -20,6 +20,18 @@ const router = createRouter({
       },
     },
     {
+      path: '/sucamec/estados-carne',
+      name: 'sucamec-estados-carne',
+      component: () => import('@/pages/SucamecPage.vue'),
+      meta: {
+        section: 'SUCAMEC',
+        pageTitle: 'ESTADOS CARNÉ',
+        homeTo: '/sucamec',
+        sucamecSection: 'estados-carne',
+        breadcrumb: [{ label: 'SUCAMEC', to: '/sucamec' }, { label: 'ESTADOS CARNÉ' }],
+      },
+    },
+    {
       path: '/inicio',
       name: 'inicio',
       component: () => import('@/pages/DashboardPage.vue'),

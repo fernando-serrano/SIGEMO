@@ -274,10 +274,23 @@ watch(
   <div class="users-role-layout">
     <section class="card card--acrylic tracking-card users-role-list-card" aria-label="Listado de roles">
       <div class="card__body users-role-list">
-        <label class="tracking-field">
+        <div class="tracking-field">
           <span class="input-label">Buscar rol</span>
-          <input :value="roleSearchTerm" class="input input--sm" type="text" placeholder="Codigo, nombre o descripcion" @input="updateRoleSearchTerm" />
-        </label>
+          <label class="search-input search-input--sm" aria-label="Buscar rol">
+            <span class="search-input__icon" aria-hidden="true">
+              <svg viewBox="0 0 16 16" fill="none">
+                <path d="M7.25 12.25A5 5 0 1 0 7.25 2.25a5 5 0 0 0 0 10ZM11 11l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+              </svg>
+            </span>
+            <input
+              :value="roleSearchTerm"
+              class="search-input__field"
+              type="text"
+              placeholder="Codigo, nombre o descripcion"
+              @input="updateRoleSearchTerm"
+            />
+          </label>
+        </div>
 
         <button
           v-for="role in paginatedRoles"
@@ -473,16 +486,23 @@ watch(
 
           <div v-if="activeRoleTab === 'usuarios'" class="users-permission-tab-section">
             <div class="users-assignment-toolbar">
-              <label class="tracking-field users-role-assignment-search">
+              <div class="tracking-field users-role-assignment-search">
                 <span class="input-label">Buscar usuario</span>
-                <input
-                  :value="assignmentSearchTerm"
-                  class="input input--sm"
-                  type="text"
-                  placeholder="Usuario, username, area o rol"
-                  @input="updateAssignmentSearchTerm"
-                />
-              </label>
+                <label class="search-input search-input--sm" aria-label="Buscar usuario">
+                  <span class="search-input__icon" aria-hidden="true">
+                    <svg viewBox="0 0 16 16" fill="none">
+                      <path d="M7.25 12.25A5 5 0 1 0 7.25 2.25a5 5 0 0 0 0 10ZM11 11l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                    </svg>
+                  </span>
+                  <input
+                    :value="assignmentSearchTerm"
+                    class="search-input__field"
+                    type="text"
+                    placeholder="Usuario, username, area o rol"
+                    @input="updateAssignmentSearchTerm"
+                  />
+                </label>
+              </div>
 
               <label
                 v-if="paginatedRoleUsers.length > 0"
@@ -579,16 +599,23 @@ watch(
 
           <div v-else-if="activeRoleTab === 'permisos'" class="users-permission-tab-section">
             <div class="users-assignment-toolbar">
-              <label class="tracking-field users-role-assignment-search">
+              <div class="tracking-field users-role-assignment-search">
                 <span class="input-label">Buscar permiso</span>
-                <input
-                  :value="assignmentSearchTerm"
-                  class="input input--sm"
-                  type="text"
-                  placeholder="Permiso, codigo o modulo"
-                  @input="updateAssignmentSearchTerm"
-                />
-              </label>
+                <label class="search-input search-input--sm" aria-label="Buscar permiso">
+                  <span class="search-input__icon" aria-hidden="true">
+                    <svg viewBox="0 0 16 16" fill="none">
+                      <path d="M7.25 12.25A5 5 0 1 0 7.25 2.25a5 5 0 0 0 0 10ZM11 11l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                    </svg>
+                  </span>
+                  <input
+                    :value="assignmentSearchTerm"
+                    class="search-input__field"
+                    type="text"
+                    placeholder="Permiso, codigo o modulo"
+                    @input="updateAssignmentSearchTerm"
+                  />
+                </label>
+              </div>
 
               <label
                 v-if="paginatedRolePermissions.length > 0"

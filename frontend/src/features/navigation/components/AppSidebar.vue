@@ -45,6 +45,12 @@ const sucamecItems: SidebarItem[] = [
     to: '/sucamec',
     iconPath: 'M4 13H9V20H4V13 Z M10.5 4H19.5V11H10.5V4 Z M10.5 13H19.5V20H10.5V13 Z M4 4H9V11H4V4 Z',
   },
+  {
+    id: 'sucamec-card-status',
+    label: 'ESTADOS CARNÉ',
+    to: '/sucamec/estados-carne',
+    iconPath: 'M8 9H16C17.1 9 18 9.9 18 11V17C18 18.1 17.1 19 16 19H8C6.9 19 6 18.1 6 17V11C6 9.9 6.9 9 8 9Z M9 13H9.01 M15 13H15.01 M10 16H14 M12 9V5 M9 5H15 M5 13H3 M21 13H19',
+  },
 ]
 
 const sigemoItems: SidebarItem[] = [
@@ -113,7 +119,7 @@ const sigemoMenu = computed(() =>
 const sucamecMenu = computed(() =>
   sucamecItems.map((item) => ({
     ...item,
-    active: Boolean(item.to && route.path.startsWith(item.to)),
+    active: Boolean(item.to && (item.to === '/sucamec' ? route.path === item.to : route.path.startsWith(item.to))),
   })),
 )
 

@@ -8,6 +8,9 @@ type PermissionGroup = { moduleName: string; permissions: AccessPermission[] }
 type PermissionReviewItem = { moduleName: string; permission: AccessPermission }
 
 const pendingStatusUser = ref<AccessUser | null>(null)
+const directPermissionPage = ref(1)
+const directPermissionPageSize = 9
+const directPermissionSearchTerm = ref('')
 
 const props = defineProps<{
   searchTerm: string
@@ -30,6 +33,7 @@ const props = defineProps<{
   formMode: 'create' | 'edit'
   form: UserPayload
   selectedFormRoles: AccessRole[]
+  roleSelectionSearchTerm: string
   filteredRoles: AccessRole[]
   rolePaginationPage: number
   rolePaginationPages: number[]
@@ -56,6 +60,7 @@ const emit = defineEmits<{
   (event: 'update:userRoleFilter', value: string): void
   (event: 'update:userStatusFilter', value: string): void
   (event: 'update:userPaginationPage', value: number): void
+  (event: 'update:roleSelectionSearchTerm', value: string): void
   (event: 'update:rolePaginationPage', value: number): void
   (event: 'create-user'): void
   (event: 'edit-user', user: AccessUser): void
@@ -79,6 +84,15 @@ function updateUserStatusFilter(event: Event): void {
   emit('update:userStatusFilter', (event.target as HTMLSelectElement).value)
 }
 
+function updateRoleSelectionSearchTerm(event: Event): void {
+  emit('update:roleSelectionSearchTerm', (event.target as HTMLInputElement).value)
+}
+
+function updateDirectPermissionSearchTerm(event: Event): void {
+  directPermissionSearchTerm.value = (event.target as HTMLInputElement).value
+  directPermissionPage.value = 1
+}
+
 function goToUserPage(page: number): void {
   const nextPage = Math.min(Math.max(page, 1), props.userPaginationTotalPages)
   emit('update:userPaginationPage', nextPage)
@@ -87,6 +101,10 @@ function goToUserPage(page: number): void {
 function goToRolePage(page: number): void {
   const nextPage = Math.min(Math.max(page, 1), props.rolePaginationTotalPages)
   emit('update:rolePaginationPage', nextPage)
+}
+
+function goToDirectPermissionPage(page: number): void {
+  directPermissionPage.value = Math.min(Math.max(page, 1), directPermissionTotalPages.value)
 }
 
 function toggleSelection(collection: string[], value: string): string[] {
@@ -149,6 +167,49 @@ const effectivePermissionReviewItems = computed<PermissionReviewItem[]>(() =>
     })),
   ),
 )
+
+const allAvailableDirectPermissionItems = computed<PermissionReviewItem[]>(() =>
+  props.availableDirectPermissionsByModule.flatMap((group) =>
+    group.permissions.map((permission) => ({
+      moduleName: group.moduleName,
+      permission,
+    })),
+  ),
+)
+
+const availableDirectPermissionItems = computed<PermissionReviewItem[]>(() => {
+  const query = directPermissionSearchTerm.value.trim().toLowerCase()
+
+  if (!query) {
+    return allAvailableDirectPermissionItems.value
+  }
+
+  return allAvailableDirectPermissionItems.value.filter((item) => {
+    const permission = item.permission
+    return [permission.nombre, permission.codigo, permission.modulo, permission.accion, permission.descripcion, item.moduleName]
+      .join(' ')
+      .toLowerCase()
+      .includes(query)
+  })
+})
+
+const directPermissionTotalPages = computed(() =>
+  Math.max(1, Math.ceil(availableDirectPermissionItems.value.length / directPermissionPageSize)),
+)
+
+const directPermissionPages = computed(() =>
+  Array.from({ length: directPermissionTotalPages.value }, (_, index) => index + 1),
+)
+
+const paginatedDirectPermissionItems = computed(() => {
+  if (directPermissionPage.value > directPermissionTotalPages.value) {
+    directPermissionPage.value = directPermissionTotalPages.value
+  }
+
+  const start = (directPermissionPage.value - 1) * directPermissionPageSize
+  return availableDirectPermissionItems.value.slice(start, start + directPermissionPageSize)
+})
+
 </script>
 
 <template>
@@ -156,10 +217,23 @@ const effectivePermissionReviewItems = computed<PermissionReviewItem[]>(() =>
     <section class="card card--acrylic tracking-card users-table-card" aria-label="Listado de usuarios">
       <div class="card__body users-table-body">
         <div class="users-filter-row">
-          <label class="tracking-field users-filter-search">
+          <div class="tracking-field users-filter-search">
             <span class="input-label">Buscar usuario</span>
-            <input :value="searchTerm" class="input input--sm" type="text" placeholder="Usuario, nombre, correo o area" @input="updateSearchTerm" />
-          </label>
+            <label class="search-input search-input--sm" aria-label="Buscar usuario">
+              <span class="search-input__icon" aria-hidden="true">
+                <svg viewBox="0 0 16 16" fill="none">
+                  <path d="M7.25 12.25A5 5 0 1 0 7.25 2.25a5 5 0 0 0 0 10ZM11 11l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                </svg>
+              </span>
+              <input
+                :value="searchTerm"
+                class="search-input__field"
+                type="text"
+                placeholder="Usuario, nombre, correo o area"
+                @input="updateSearchTerm"
+              />
+            </label>
+          </div>
 
           <label class="tracking-field">
             <span class="input-label">Rol</span>
@@ -525,9 +599,26 @@ const effectivePermissionReviewItems = computed<PermissionReviewItem[]>(() =>
         </section>
 
         <section class="users-access-panel">
-          <div class="users-access-header">
-            <p class="users-access-title">Seleccion de roles</p>
-            <p class="users-access-copy">Puedes asignar uno o varios roles segun el alcance operativo del usuario.</p>
+          <div class="users-access-header users-access-header--toolbar">
+            <div>
+              <p class="users-access-title">Seleccion de roles</p>
+              <p class="users-access-copy">Puedes asignar uno o varios roles segun el alcance operativo del usuario.</p>
+            </div>
+
+            <label class="search-input search-input--sm users-selection-search" aria-label="Buscar roles">
+              <span class="search-input__icon" aria-hidden="true">
+                <svg viewBox="0 0 16 16" fill="none">
+                  <path d="M7.25 12.25A5 5 0 1 0 7.25 2.25a5 5 0 0 0 0 10ZM11 11l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                </svg>
+              </span>
+              <input
+                :value="roleSelectionSearchTerm"
+                class="search-input__field"
+                type="text"
+                placeholder="Buscar rol"
+                @input="updateRoleSelectionSearchTerm"
+              />
+            </label>
           </div>
 
           <div class="users-role-selector-grid">
@@ -630,55 +721,104 @@ const effectivePermissionReviewItems = computed<PermissionReviewItem[]>(() =>
         </section>
 
         <section class="users-access-panel">
-          <div class="users-access-header">
-            <p class="users-access-title">Seleccion de permisos</p>
-            <p class="users-access-copy">Solo se muestran permisos que todavia no vienen heredados desde roles.</p>
+          <div class="users-access-header users-access-header--toolbar">
+            <div>
+              <p class="users-access-title">Seleccion de permisos</p>
+              <p class="users-access-copy">Solo se muestran permisos que todavia no vienen heredados desde roles.</p>
+            </div>
+
+            <label class="search-input search-input--sm users-selection-search" aria-label="Buscar permisos">
+              <span class="search-input__icon" aria-hidden="true">
+                <svg viewBox="0 0 16 16" fill="none">
+                  <path d="M7.25 12.25A5 5 0 1 0 7.25 2.25a5 5 0 0 0 0 10ZM11 11l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                </svg>
+              </span>
+              <input
+                :value="directPermissionSearchTerm"
+                class="search-input__field"
+                type="text"
+                placeholder="Buscar permiso"
+                @input="updateDirectPermissionSearchTerm"
+              />
+            </label>
           </div>
 
-          <div class="users-permission-groups">
-            <section v-for="group in availableDirectPermissionsByModule" :key="group.moduleName" class="users-permission-group">
-              <header class="users-permission-group-header">
-                <p class="users-permission-group-title">{{ group.moduleName }}</p>
-              </header>
-
-              <div class="users-role-selector-grid">
-                <label
-                  v-for="permission in group.permissions"
-                  :key="permission.id"
-                  class="users-permission-choice checkbox"
-                  :class="{ 'users-permission-choice--active': directPermissionIds.includes(permission.id) }"
-                >
-                  <input
-                    :checked="directPermissionIds.includes(permission.id)"
-                    class="checkbox__input"
-                    type="checkbox"
-                    @change="toggleFormPermission(permission.id)"
-                  />
-                  <span class="checkbox__box" aria-hidden="true" />
-                  <span class="users-permission-choice-copy">
-                    <span class="users-permission-choice-heading">
-                      <span class="users-permission-choice-title-row">
-                        <span class="users-permission-choice-name">{{ permission.nombre }}</span>
-                        <span class="users-chip-meta">{{ permission.codigo }}</span>
-                      </span>
-                      <span
-                        class="users-role-choice-status"
-                        :class="permission.estado ? 'users-role-choice-status--active' : 'users-role-choice-status--inactive'"
-                      >
-                        <span class="status-dot" :class="permission.estado ? '' : 'status-dot--offline'" aria-hidden="true" />
-                        <span>{{ permission.estado ? 'Activo' : 'Inactivo' }}</span>
-                      </span>
-                    </span>
-                    <span v-if="permission.descripcion" class="users-role-choice-description">{{ permission.descripcion }}</span>
-                    <span class="users-role-choice-tags">
-                      <span v-if="permission.modulo" class="badge badge--sm badge--info">{{ permission.modulo }}</span>
-                      <span v-if="permission.accion" class="badge badge--sm badge--secondary">{{ permission.accion }}</span>
-                    </span>
+          <div class="users-role-selector-grid">
+            <label
+              v-for="item in paginatedDirectPermissionItems"
+              :key="item.permission.id"
+              class="users-permission-choice checkbox"
+              :class="{ 'users-permission-choice--active': directPermissionIds.includes(item.permission.id) }"
+            >
+              <input
+                :checked="directPermissionIds.includes(item.permission.id)"
+                class="checkbox__input"
+                type="checkbox"
+                @change="toggleFormPermission(item.permission.id)"
+              />
+              <span class="checkbox__box" aria-hidden="true" />
+              <span class="users-permission-choice-copy">
+                <span class="users-permission-choice-heading">
+                  <span class="users-permission-choice-title-row">
+                    <span class="users-permission-choice-name">{{ item.permission.nombre }}</span>
+                    <span class="users-chip-meta">{{ item.permission.codigo }}</span>
                   </span>
-                </label>
-              </div>
-            </section>
+                  <span
+                    class="users-role-choice-status"
+                    :class="item.permission.estado ? 'users-role-choice-status--active' : 'users-role-choice-status--inactive'"
+                  >
+                    <span class="status-dot" :class="item.permission.estado ? '' : 'status-dot--offline'" aria-hidden="true" />
+                    <span>{{ item.permission.estado ? 'Activo' : 'Inactivo' }}</span>
+                  </span>
+                </span>
+                <span v-if="item.permission.descripcion" class="users-role-choice-description">{{ item.permission.descripcion }}</span>
+                <span class="users-role-choice-tags">
+                  <span class="badge badge--sm badge--info">{{ item.moduleName }}</span>
+                  <span v-if="item.permission.accion" class="badge badge--sm badge--secondary">{{ item.permission.accion }}</span>
+                </span>
+              </span>
+            </label>
+
+            <p v-if="availableDirectPermissionItems.length === 0" class="users-empty-state users-selector-empty">
+              No hay permisos directos disponibles para seleccionar.
+            </p>
           </div>
+
+          <nav
+            v-if="availableDirectPermissionItems.length > 0"
+            class="pagination pagination--sm users-pagination users-pagination--roles users-tab-pagination"
+            aria-label="Paginacion de permisos directos"
+          >
+            <button
+              type="button"
+              class="btn btn--ghost btn--sm"
+              :disabled="directPermissionPage === 1"
+              @click="goToDirectPermissionPage(directPermissionPage - 1)"
+            >
+              Anterior
+            </button>
+
+            <button
+              v-for="page in directPermissionPages"
+              :key="`direct-permission-page-${page}`"
+              type="button"
+              class="btn btn--sm"
+              :class="page === directPermissionPage ? 'btn--primary' : 'btn--ghost'"
+              :aria-current="page === directPermissionPage ? 'page' : undefined"
+              @click="goToDirectPermissionPage(page)"
+            >
+              {{ page }}
+            </button>
+
+            <button
+              type="button"
+              class="btn btn--ghost btn--sm"
+              :disabled="directPermissionPage === directPermissionTotalPages"
+              @click="goToDirectPermissionPage(directPermissionPage + 1)"
+            >
+              Siguiente
+            </button>
+          </nav>
         </section>
       </div>
 

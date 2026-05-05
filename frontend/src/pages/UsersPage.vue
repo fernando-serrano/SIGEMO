@@ -47,11 +47,13 @@ const userRoleFilter = ref('')
 const userStatusFilter = ref('')
 const userPaginationPage = ref(1)
 const userRolePaginationPage = ref(1)
+const userWizardRoleSearchTerm = ref('')
 const roleSearchTerm = ref('')
 const permissionSearchTerm = ref('')
 const selectedUserId = ref<string | null>(null)
 const selectedRoleId = ref<string | null>(null)
 const selectedPermissionId = ref<string | null>(null)
+const syncedWizardUserId = ref<string | null>(null)
 const formMode = ref<'create' | 'edit'>('create')
 const roleFormMode = ref<'create' | 'edit'>('create')
 const permissionFormMode = ref<'create' | 'edit'>('create')
@@ -246,20 +248,40 @@ const filteredRoles = computed(() => {
   })
 })
 
+const filteredUserWizardRoles = computed(() => {
+  const query = userWizardRoleSearchTerm.value.trim().toLowerCase()
+  const roles = [...catalog.roles]
+
+  const filtered = !query
+    ? roles
+    : roles.filter((role) =>
+        [role.codigo, role.nombre, role.descripcion].join(' ').toLowerCase().includes(query),
+      )
+
+  return filtered.sort((left, right) => {
+    const userCountDifference = getRoleAssignedUsers(right.id).length - getRoleAssignedUsers(left.id).length
+    if (userCountDifference !== 0) {
+      return userCountDifference
+    }
+
+    return left.nombre.localeCompare(right.nombre)
+  })
+})
+
 const userRolePageSize = 9
 
-const userRolePaginationTotalPages = computed(() => Math.max(1, Math.ceil(filteredRoles.value.length / userRolePageSize)))
+const userRolePaginationTotalPages = computed(() => Math.max(1, Math.ceil(filteredUserWizardRoles.value.length / userRolePageSize)))
 
 const paginatedUserWizardRoles = computed(() => {
   const start = (userRolePaginationPage.value - 1) * userRolePageSize
-  return filteredRoles.value.slice(start, start + userRolePageSize)
+  return filteredUserWizardRoles.value.slice(start, start + userRolePageSize)
 })
 
 const userRolePaginationPages = computed(() =>
   Array.from({ length: userRolePaginationTotalPages.value }, (_, index) => index + 1),
 )
 
-watch(filteredRoles, () => {
+watch(filteredUserWizardRoles, () => {
   userRolePaginationPage.value = 1
 })
 
@@ -522,6 +544,7 @@ function resetForm(): void {
   form.is_active = true
   form.role_ids = []
   form.permission_ids = []
+  syncedWizardUserId.value = null
   userValidationAttempted.value = false
 }
 
@@ -581,6 +604,7 @@ function syncFormWithPermission(permission: AccessPermission): void {
 
 function beginCreateUser(): void {
   selectedUserId.value = null
+  syncedWizardUserId.value = null
   formMode.value = 'create'
   userFeedback.value = ''
   userFeedbackTone.value = 'accent'
@@ -590,6 +614,7 @@ function beginCreateUser(): void {
 
 function beginEditUser(user: AccessUser): void {
   selectedUserId.value = user.id
+  syncedWizardUserId.value = user.id
   formMode.value = 'edit'
   userFeedback.value = ''
   userFeedbackTone.value = 'accent'
@@ -608,6 +633,7 @@ function cancelUserWizard(): void {
   if (userViewMode.value === 'create') {
     resetForm()
   }
+  syncedWizardUserId.value = null
   void router.push('/usuarios/usuarios')
 }
 
@@ -744,8 +770,9 @@ function syncUserWizardFromRoute(): void {
   userFeedbackTone.value = 'accent'
 
   const existingUser = catalog.users.find((user) => user.id === routeUserId)
-  if (existingUser) {
+  if (existingUser && syncedWizardUserId.value !== routeUserId) {
     syncFormWithUser(existingUser)
+    syncedWizardUserId.value = routeUserId
   }
 }
 
@@ -1061,11 +1088,12 @@ onBeforeUnmount(() => {
           :form-mode="formMode"
           :form="form"
           :selected-form-roles="selectedFormRoles"
+          :role-selection-search-term="userWizardRoleSearchTerm"
           :filtered-roles="paginatedUserWizardRoles"
           :role-pagination-page="userRolePaginationPage"
           :role-pagination-pages="userRolePaginationPages"
           :role-pagination-total-pages="userRolePaginationTotalPages"
-          :role-pagination-total-items="filteredRoles.length"
+          :role-pagination-total-items="filteredUserWizardRoles.length"
           :inherited-permission-ids="inheritedPermissionIds"
           :direct-permission-ids="directPermissionIds"
           :effective-permission-ids-preview="effectivePermissionIdsPreview"
@@ -1084,6 +1112,7 @@ onBeforeUnmount(() => {
           @update:user-role-filter="userRoleFilter = $event"
           @update:user-status-filter="userStatusFilter = $event"
           @update:user-pagination-page="userPaginationPage = $event"
+          @update:role-selection-search-term="userWizardRoleSearchTerm = $event"
           @update:role-pagination-page="userRolePaginationPage = $event"
           @create-user="beginCreateUser"
           @edit-user="beginEditUser"
