@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from app.db import close_client, ensure_indexes, ping
 from app.exceptions import AppException
 from app.routers.auth import router as auth_router
+from app.routers.sucamec import router as sucamec_router
 from app.routers.users import router as users_router
 
 
@@ -41,6 +42,7 @@ async def app_exception_handler(request: Request, exc: AppException):
 
 
 app.include_router(auth_router)
+app.include_router(sucamec_router)
 app.include_router(users_router)
 
 

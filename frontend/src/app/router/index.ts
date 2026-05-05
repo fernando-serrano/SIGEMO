@@ -25,10 +25,10 @@ const router = createRouter({
       component: () => import('@/pages/SucamecPage.vue'),
       meta: {
         section: 'SUCAMEC',
-        pageTitle: 'ESTADOS CARNÉ',
+        pageTitle: 'ESTADOS',
         homeTo: '/sucamec',
         sucamecSection: 'estados-carne',
-        breadcrumb: [{ label: 'SUCAMEC', to: '/sucamec' }, { label: 'ESTADOS CARNÉ' }],
+        breadcrumb: [{ label: 'SUCAMEC', to: '/sucamec' }, { label: 'ESTADOS' }],
       },
     },
     {

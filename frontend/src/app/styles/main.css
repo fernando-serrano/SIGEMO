@@ -5,3 +5,161 @@
 #app {
   min-height: 100vh;
 }
+
+.sigemo-global-run-alert {
+  position: fixed;
+  right: var(--fa-space-5);
+  top: var(--fa-space-5);
+  z-index: 9999;
+  width: min(420px, calc(100vw - (var(--fa-space-5) * 2)));
+  overflow: hidden;
+  box-shadow: var(--fa-shadow-xl);
+  pointer-events: auto;
+}
+
+.sigemo-global-run-alert .alert__icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.sigemo-global-run-actions {
+  display: flex;
+  gap: var(--fa-space-2);
+  flex-wrap: wrap;
+  padding-top: var(--fa-space-3);
+}
+
+.sigemo-global-run-progress {
+  position: absolute;
+  left: 3px;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--fa-color-accent) 24%, transparent);
+}
+
+.sigemo-global-run-progress::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 42%;
+  background: var(--fa-color-accent);
+  animation: sigemo-run-progress-indeterminate 1.4s ease-in-out infinite;
+}
+
+.sigemo-global-run-alert--terminal .sigemo-global-run-progress::before {
+  width: 100%;
+  transform-origin: left;
+  animation: sigemo-run-progress-dismiss 8s linear forwards;
+}
+
+@keyframes sigemo-run-progress-indeterminate {
+  0% {
+    transform: translateX(-110%);
+  }
+  50% {
+    transform: translateX(90%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+@keyframes sigemo-run-progress-dismiss {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+.sucamec-title-block {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--fa-space-3);
+}
+
+.sucamec-icon,
+.sucamec-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--fa-color-accent) 86%, white 14%);
+}
+
+.sucamec-icon {
+  width: 42px;
+  height: 42px;
+  border: var(--fa-border-width) solid color-mix(in srgb, var(--fa-color-accent) 38%, transparent);
+  background: color-mix(in srgb, var(--fa-color-accent) 10%, transparent);
+}
+
+.sucamec-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.sucamec-card-icon {
+  width: 28px;
+  height: 28px;
+  margin-bottom: var(--fa-space-1);
+}
+
+.sucamec-card-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.sucamec-preview {
+  display: grid;
+  gap: var(--fa-space-3);
+  padding: var(--fa-space-3);
+  border: var(--fa-border-width) solid color-mix(in srgb, var(--fa-color-border) 74%, transparent);
+  background: color-mix(in srgb, var(--fa-color-bg-base) 10%, transparent);
+}
+
+.sucamec-preview__header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--fa-space-3);
+  flex-wrap: wrap;
+}
+
+.table-shell {
+  max-width: 100%;
+  overflow: auto;
+  border: var(--fa-border-width) solid color-mix(in srgb, var(--fa-color-border) 70%, transparent);
+}
+
+.data-table {
+  width: 100%;
+  min-width: 360px;
+  border-collapse: collapse;
+  color: var(--fa-color-text-primary);
+  font-size: var(--fa-font-size-sm);
+}
+
+.data-table th,
+.data-table td {
+  padding: 10px 12px;
+  border-bottom: var(--fa-border-width) solid color-mix(in srgb, var(--fa-color-border) 58%, transparent);
+  text-align: left;
+  vertical-align: top;
+}
+
+.data-table th {
+  color: color-mix(in srgb, var(--fa-color-accent) 84%, white 16%);
+  font-size: var(--fa-font-size-xs);
+  font-weight: var(--fa-font-weight-semibold);
+  letter-spacing: var(--fa-letter-spacing-caps);
+  text-transform: uppercase;
+  background: color-mix(in srgb, var(--fa-color-bg-surface-1) 64%, transparent);
+}
+
+.data-table td {
+  overflow-wrap: anywhere;
+}

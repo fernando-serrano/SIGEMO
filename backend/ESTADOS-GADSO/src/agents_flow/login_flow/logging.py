@@ -1,0 +1,142 @@
+from __future__ import annotations
+
+import logging
+import os
+import shutil
+import sys
+from datetime import datetime
+from pathlib import Path
+
+
+def _max_run_dirs() -> int:
+    try:
+        return max(1, int(str(os.getenv("SUCAMEC_LOG_MAX_RUNS", os.getenv("SUCAMEC_LOG_MAX_FILES", "10"))).strip()))
+    except Exception:
+        return 10
+
+
+def max_run_dirs() -> int:
+    return _max_run_dirs()
+
+
+def _prune_old_run_dirs(logs_dir: Path, keep_dirs: int, protected_dir: Path) -> int:
+    protected = protected_dir.resolve()
+    files = [
+        path
+        for path in logs_dir.iterdir()
+        if path.is_dir() and path.resolve() != protected
+    ]
+    keep_previous = max(0, keep_dirs - 1)
+    if len(files) <= keep_previous:
+        return 0
+
+    files.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+    deleted = 0
+    for old_dir in files[keep_previous:]:
+        try:
+            shutil.rmtree(old_dir)
+            deleted += 1
+        except Exception:
+            continue
+    return deleted
+
+
+def prune_old_run_dirs(base_dir: Path, keep_dirs: int, protected_dir: Path) -> int:
+    base_dir.mkdir(parents=True, exist_ok=True)
+    return _prune_old_run_dirs(base_dir, keep_dirs=keep_dirs, protected_dir=protected_dir)
+
+
+def _console_handler() -> logging.StreamHandler:
+    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(formatter)
+    return handler
+
+
+def build_subflow_logger(
+    base_dir: Path,
+    subflow_name: str,
+    console_handler: logging.Handler | None = None,
+    logger_prefix: str = "",
+) -> logging.Logger:
+    log_dir = base_dir
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    logger_name = ".".join(part for part in [logger_prefix, subflow_name] if part)
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    logger.handlers.clear()
+
+    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
+    log_file = log_dir / f"{subflow_name}.log"
+
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    if console_handler is not None:
+        logger.addHandler(console_handler)
+
+    logger.info("Log de subflujo inicializado en %s", log_file)
+    return logger
+
+
+class RunLoggers:
+    def __init__(self, logs_dir: Path, run_name: str | None = None, scope_name: str | None = None):
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        self.logs_dir = logs_dir
+        self.run_name = run_name or datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.run_dir = logs_dir / self.run_name
+        self.run_dir.mkdir(parents=True, exist_ok=True)
+        self.scope_name = str(scope_name or "").strip()
+        self.scope_dir = self.run_dir / self.scope_name if self.scope_name else self.run_dir
+        self.scope_dir.mkdir(parents=True, exist_ok=True)
+        self.console_handler = _console_handler()
+        self._loggers: dict[str, logging.Logger] = {}
+
+        self._deleted_dirs = _prune_old_run_dirs(
+            logs_dir,
+            keep_dirs=_max_run_dirs(),
+            protected_dir=self.run_dir,
+        )
+        self._retention_logged = False
+
+    def get(self, subflow_name: str) -> logging.Logger:
+        if subflow_name not in self._loggers:
+            self._loggers[subflow_name] = build_subflow_logger(
+                self.scope_dir,
+                subflow_name,
+                console_handler=self.console_handler,
+                logger_prefix=".".join(part for part in [self.run_name, self.scope_name] if part),
+            )
+            if self._deleted_dirs and not self._retention_logged:
+                self._loggers[subflow_name].info(
+                    "Control de logs aplicado: %s corrida(s) antigua(s) eliminada(s)",
+                    self._deleted_dirs,
+                )
+                self._retention_logged = True
+        return self._loggers[subflow_name]
+
+    def close(self) -> None:
+        for logger in self._loggers.values():
+            for handler in list(logger.handlers):
+                try:
+                    handler.flush()
+                except Exception:
+                    pass
+                if isinstance(handler, logging.FileHandler):
+                    logger.removeHandler(handler)
+                    try:
+                        handler.close()
+                    except Exception:
+                        pass
+        try:
+            self.console_handler.flush()
+        except Exception:
+            pass
+
+
+def build_logger(logs_dir: Path, name: str = "sucamec_estado") -> logging.Logger:
+    """Compatibilidad: crea una corrida y retorna un logger para `name`."""
+    return RunLoggers(logs_dir).get(name)

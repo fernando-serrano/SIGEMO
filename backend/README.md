@@ -47,10 +47,48 @@ Variables relevantes:
 - `MONGODB_USER_ROLES_COLLECTION=usuarios_roles`
 - `MONGODB_ROLE_PERMISSIONS_COLLECTION=roles_permisos`
 - `MONGODB_USER_PERMISSIONS_COLLECTION=usuarios_permisos`
+- `ESTADOS_GADSO_DIR=./ESTADOS-GADSO`
+- `ESTADOS_GADSO_PYTHON=` opcional; permite apuntar a otro interprete/venv para el flujo Playwright. Si esta vacio, la API busca automaticamente `ESTADOS-GADSO/.venv/Scripts/python.exe` en Windows o `ESTADOS-GADSO/.venv/bin/python` en Linux.
+- `ESTADOS_GADSO_MAX_UPLOAD_MB=50`
+- `ESTADOS_GADSO_MAX_RETAINED_UPLOADS=3` cantidad maxima de uploads temporales `entrada_*.xlsx` que se conservan mientras no hayan sido ejecutados. Los archivos usados por un job se eliminan al finalizar.
 
 Nota:
 
 - El nombre actual de base de datos `sigemo_db` se mantiene por compatibilidad tecnica en esta etapa del refactor.
+- Las credenciales del flujo SUCAMEC no se versionan. En despliegue pueden vivir como variables del entorno o en `backend/ESTADOS-GADSO/.env` dentro del workspace/servidor.
+
+## Flujo ESTADOS-GADSO
+
+El submodulo `SUCAMEC > ESTADOS CARNE` ejecuta el flujo Python/Playwright desde un boton del frontend:
+
+1. El usuario carga un archivo `.xlsx`.
+2. La API lo guarda en `ESTADOS-GADSO/data/entrada_data`.
+3. Al ejecutar, la API crea un job en `ESTADOS-GADSO/runtime/jobs` y pasa ese archivo por `SUCAMEC_INPUT_EXCEL`.
+4. El frontend consulta el estado del job y habilita la descarga si el flujo genera resultado.
+5. Al finalizar el job, el Excel temporal cargado se elimina para evitar acumulacion en el servidor. La plantilla base `plantilla_mis_vigilantes.xlsx` se conserva.
+
+Para servidores Linux/Coder, despues de instalar dependencias:
+
+```bash
+cd backend/ESTADOS-GADSO
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m playwright install chromium
+```
+
+Si el contenedor base no trae dependencias del navegador, instalar tambien:
+
+```bash
+python -m playwright install-deps chromium
+```
+
+En Coder/Linux se recomienda usar Python 3.11 o 3.12 para el flujo OCR/Playwright. Si el venv vive fuera de `backend/ESTADOS-GADSO/.venv`, define:
+
+```env
+ESTADOS_GADSO_PYTHON=/ruta/al/venv/bin/python
+```
 
 ## Ejecutar en desarrollo
 

@@ -47,7 +47,7 @@ const sucamecItems: SidebarItem[] = [
   },
   {
     id: 'sucamec-card-status',
-    label: 'ESTADOS CARNÉ',
+    label: 'Estados',
     to: '/sucamec/estados-carne',
     iconPath: 'M8 9H16C17.1 9 18 9.9 18 11V17C18 18.1 17.1 19 16 19H8C6.9 19 6 18.1 6 17V11C6 9.9 6.9 9 8 9Z M9 13H9.01 M15 13H15.01 M10 16H14 M12 9V5 M9 5H15 M5 13H3 M21 13H19',
   },
