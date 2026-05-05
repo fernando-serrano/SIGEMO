@@ -101,7 +101,14 @@ SUCAMEC_LOGIN_VALIDATION_TIMEOUT_MS=12000
 SUCAMEC_LOG_MAX_RUNS=10
 SUCAMEC_INPUT_EXCEL=
 SUCAMEC_MAX_RECORDS=0
+ESTADOS_GADSO_MAX_RETAINED_JOBS=10
 ```
+
+Retencion de ejecuciones:
+
+- Los archivos JSON de `runtime/jobs` mantienen solo las ultimas 10 ejecuciones por defecto.
+- Si quieres otro limite, ajusta `ESTADOS_GADSO_MAX_RETAINED_JOBS` en el entorno del backend.
+- La ejecucion actual siempre se conserva aunque se aplique la limpieza.
 
 Selector de modulo de consultas:
 

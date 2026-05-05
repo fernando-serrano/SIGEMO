@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import LoginFormCard from '@/features/auth/components/LoginFormCard.vue'
 import LoginHeroPanel from '@/features/auth/components/LoginHeroPanel.vue'
@@ -8,6 +8,7 @@ import LoginThemeSwitcher from '@/features/auth/components/LoginThemeSwitcher.vu
 import type { LoginUser, ThemeName } from '@/features/auth/types'
 
 const router = useRouter()
+const route = useRoute()
 const STORAGE_KEY = 'sigemo-theme'
 const allowedThemes: ThemeName[] = ['dark', 'light', 'corp', 'corp-dark']
 
@@ -21,7 +22,8 @@ function applyTheme(selectedTheme: ThemeName): void {
 
 function onLoginSuccess(user: LoginUser): void {
   sessionStorage.setItem('sigemo-user', JSON.stringify(user))
-  void router.push('/inicio')
+  const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/') ? route.query.redirect : '/inicio'
+  void router.push(redirect)
 }
 
 onMounted(() => {

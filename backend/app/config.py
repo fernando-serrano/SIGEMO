@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     user_roles_collection: str = "usuarios_roles"
     role_permissions_collection: str = "roles_permisos"
     user_permissions_collection: str = "usuarios_permisos"
+    cors_origins: str = "http://localhost:4002,http://127.0.0.1:4002"
+
+    @property
+    def allowed_cors_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

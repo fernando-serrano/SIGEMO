@@ -21,13 +21,16 @@ const {
   estadosDownloadUrl,
   estadosJob,
   estadosStatusLabel,
+  globalRunCompactLabel,
   globalRunAlertVisible,
   globalRunMessage,
   globalRunTone,
   initializeEstadosRunState,
   isCancellingRun,
+  isGlobalRunAlertCollapsed,
   isRunningEstadosJob,
   isTerminalEstadosJob,
+  toggleGlobalRunAlertCollapsed,
 } = useEstadosCarneRun()
 
 onMounted(() => {
@@ -58,7 +61,13 @@ onMounted(() => {
     <aside
       v-if="globalRunAlertVisible && estadosJob"
       class="sigemo-global-run-alert alert"
-      :class="[`alert--${globalRunTone}`, { 'sigemo-global-run-alert--terminal': isTerminalEstadosJob }]"
+      :class="[
+        `alert--${globalRunTone}`,
+        {
+          'sigemo-global-run-alert--terminal': isTerminalEstadosJob,
+          'sigemo-global-run-alert--collapsed': isGlobalRunAlertCollapsed,
+        },
+      ]"
       aria-live="polite"
       aria-label="Estado de ejecucion de Estados SUCAMEC"
     >
@@ -67,10 +76,23 @@ onMounted(() => {
           <path d="M12 8V12L15 14M21 12C21 16.97 16.97 21 12 21C7.03 21 3 16.97 3 12C3 7.03 7.03 3 12 3C16.97 3 21 7.03 21 12Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
       </div>
+      <button
+        type="button"
+        class="alert__close sigemo-global-run-toggle"
+        :aria-label="isGlobalRunAlertCollapsed ? 'Expandir estado de ejecucion' : 'Minimizar estado de ejecucion'"
+        @click="toggleGlobalRunAlertCollapsed"
+      >
+        <svg v-if="isGlobalRunAlertCollapsed" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M9 6L15 12L9 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <svg v-else viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M15 6L9 12L15 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
       <div class="alert__content">
-        <div class="alert__title">Estados: {{ estadosStatusLabel }}</div>
-        <div class="alert__message">{{ globalRunMessage }}</div>
-        <div class="sigemo-global-run-actions">
+        <div class="alert__title">{{ globalRunCompactLabel }}</div>
+        <div v-if="!isGlobalRunAlertCollapsed" class="alert__message">{{ globalRunMessage }}</div>
+        <div v-if="!isGlobalRunAlertCollapsed" class="sigemo-global-run-actions">
           <button
             v-if="isRunningEstadosJob"
             type="button"
@@ -81,7 +103,7 @@ onMounted(() => {
             {{ isCancellingRun ? 'Cancelando...' : 'Cancelar ejecucion' }}
           </button>
           <a v-if="estadosDownloadUrl" class="btn btn--ghost btn--sm" :href="estadosDownloadUrl">
-            Descargar resultado
+            Descargar resultados
           </a>
         </div>
       </div>

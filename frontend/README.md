@@ -20,6 +20,8 @@ pnpm install
 pnpm dev
 ```
 
+El servidor de desarrollo queda en `http://localhost:4002` y consume la API en `http://localhost:4001`.
+
 ## Build de produccion
 
 ```sh

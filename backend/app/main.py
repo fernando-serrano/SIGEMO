@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.db import close_client, ensure_indexes, ping
+from app.config import settings
 from app.exceptions import AppException
 from app.routers.auth import router as auth_router
 from app.routers.sucamec import router as sucamec_router
@@ -23,10 +24,7 @@ app = FastAPI(title="MGA GADSO API - Modulo SIGEMO", version="0.1.0", lifespan=l
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=settings.allowed_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

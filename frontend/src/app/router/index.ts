@@ -1,5 +1,20 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
+const SESSION_STORAGE_KEY = 'sigemo-user'
+
+function hasActiveSession(): boolean {
+  const rawSession = sessionStorage.getItem(SESSION_STORAGE_KEY)
+  if (!rawSession) return false
+
+  try {
+    const session = JSON.parse(rawSession) as { id?: string; username?: string }
+    return Boolean(session.id || session.username)
+  } catch {
+    sessionStorage.removeItem(SESSION_STORAGE_KEY)
+    return false
+  }
+}
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -7,6 +22,9 @@ const router = createRouter({
       path: '/',
       name: 'login',
       component: () => import('@/pages/LoginPage.vue'),
+      meta: {
+        public: true,
+      },
     },
     {
       path: '/sucamec',
@@ -201,6 +219,24 @@ const router = createRouter({
       redirect: '/',
     },
   ],
+})
+
+router.beforeEach((to) => {
+  const isPublicRoute = Boolean(to.meta.public)
+  const isAuthenticated = hasActiveSession()
+
+  if (!isPublicRoute && !isAuthenticated) {
+    return {
+      path: '/',
+      query: to.fullPath !== '/' ? { redirect: to.fullPath } : undefined,
+    }
+  }
+
+  if (isPublicRoute && isAuthenticated) {
+    return { path: '/inicio' }
+  }
+
+  return true
 })
 
 export default router

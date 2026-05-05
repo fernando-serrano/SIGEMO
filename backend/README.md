@@ -47,10 +47,13 @@ Variables relevantes:
 - `MONGODB_USER_ROLES_COLLECTION=usuarios_roles`
 - `MONGODB_ROLE_PERMISSIONS_COLLECTION=roles_permisos`
 - `MONGODB_USER_PERMISSIONS_COLLECTION=usuarios_permisos`
+- `CORS_ORIGINS=http://localhost:4002,http://127.0.0.1:4002` origenes permitidos para el frontend, separados por coma.
 - `ESTADOS_GADSO_DIR=./ESTADOS-GADSO`
 - `ESTADOS_GADSO_PYTHON=` opcional; permite apuntar a otro interprete/venv para el flujo Playwright. Si esta vacio, la API busca automaticamente `ESTADOS-GADSO/.venv/Scripts/python.exe` en Windows o `ESTADOS-GADSO/.venv/bin/python` en Linux.
 - `ESTADOS_GADSO_MAX_UPLOAD_MB=50`
-- `ESTADOS_GADSO_MAX_RETAINED_UPLOADS=3` cantidad maxima de uploads temporales `entrada_*.xlsx` que se conservan mientras no hayan sido ejecutados. Los archivos usados por un job se eliminan al finalizar.
+- `ESTADOS_GADSO_MAX_RETAINED_UPLOADS=0` cantidad maxima de uploads temporales `entrada_*.xlsx` que se conservan aparte del upload actual. Los archivos usados por un job se eliminan al finalizar.
+- `ESTADOS_GADSO_UPLOAD_TTL_MINUTES=60` tiempo maximo que puede quedar un upload temporal sin ejecutarse. Se poda automaticamente en nuevas operaciones de la API.
+- `ESTADOS_GADSO_MAX_RETAINED_JOBS=10` cantidad maxima de archivos JSON de ejecuciones conservados en `ESTADOS-GADSO/runtime/jobs`. Cuando se supera el limite, se elimina el JSON mas antiguo y se mantiene el job actual.
 
 Nota:
 
@@ -63,9 +66,10 @@ El submodulo `SUCAMEC > ESTADOS CARNE` ejecuta el flujo Python/Playwright desde 
 
 1. El usuario carga un archivo `.xlsx`.
 2. La API lo guarda en `ESTADOS-GADSO/data/entrada_data`.
-3. Al ejecutar, la API crea un job en `ESTADOS-GADSO/runtime/jobs` y pasa ese archivo por `SUCAMEC_INPUT_EXCEL`.
+3. Al ejecutar, la API crea un job en `ESTADOS-GADSO/runtime/jobs` y pasa ese archivo por `SUCAMEC_INPUT_EXCEL`. El directorio conserva solo los ultimos `ESTADOS_GADSO_MAX_RETAINED_JOBS` JSON para evitar crecimiento indefinido.
 4. El frontend consulta el estado del job y habilita la descarga si el flujo genera resultado.
-5. Al finalizar el job, el Excel temporal cargado se elimina para evitar acumulacion en el servidor. La plantilla base `plantilla_mis_vigilantes.xlsx` se conserva.
+5. La descarga apunta a los archivos generados en `ESTADOS-GADSO/lotes/<corrida>/`. Si existen el Excel principal y el de validacion, se descargan juntos en un `.zip`.
+6. Al finalizar el job, el Excel temporal cargado se elimina para evitar acumulacion en el servidor. Si el usuario carga y no ejecuta, el temporal expira segun `ESTADOS_GADSO_UPLOAD_TTL_MINUTES`; si carga otro archivo, se poda el anterior. La plantilla base `plantilla_mis_vigilantes.xlsx` se conserva.
 
 Para servidores Linux/Coder, despues de instalar dependencias:
 
@@ -93,7 +97,7 @@ ESTADOS_GADSO_PYTHON=/ruta/al/venv/bin/python
 ## Ejecutar en desarrollo
 
 ```bash
-python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 4001
 ```
 
 ## Comandos utiles

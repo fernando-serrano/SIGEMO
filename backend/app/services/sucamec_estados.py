@@ -6,6 +6,7 @@ import re
 import signal
 import subprocess
 import sys
+import time
 import threading
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -40,6 +41,7 @@ class SucamecJob:
     return_code: int | None = None
     output_dir: str | None = None
     result_file: str | None = None
+    result_files: list[str] = field(default_factory=list)
     log_tail: str = ""
 
 
@@ -98,11 +100,28 @@ def _max_upload_bytes() -> int:
 
 
 def _max_retained_uploads() -> int:
-    raw_value = os.getenv("ESTADOS_GADSO_MAX_RETAINED_UPLOADS", "3").strip()
+    raw_value = os.getenv("ESTADOS_GADSO_MAX_RETAINED_UPLOADS", "0").strip()
     try:
         return max(0, int(raw_value))
     except ValueError:
-        return 3
+        return 0
+
+
+def _upload_ttl_seconds() -> int:
+    raw_value = os.getenv("ESTADOS_GADSO_UPLOAD_TTL_MINUTES", "60").strip()
+    try:
+        minutes = max(1, int(raw_value))
+    except ValueError:
+        minutes = 60
+    return minutes * 60
+
+
+def _max_retained_jobs() -> int:
+    raw_value = os.getenv("ESTADOS_GADSO_MAX_RETAINED_JOBS", "10").strip()
+    try:
+        return max(1, int(raw_value))
+    except ValueError:
+        return 10
 
 
 def ensure_flow_paths() -> None:
@@ -112,6 +131,7 @@ def ensure_flow_paths() -> None:
     _input_dir().mkdir(parents=True, exist_ok=True)
     _lots_dir().mkdir(parents=True, exist_ok=True)
     _jobs_dir().mkdir(parents=True, exist_ok=True)
+    _cleanup_expired_uploads()
 
 
 def _serialize_datetime(value: datetime | None) -> str | None:
@@ -139,6 +159,7 @@ def _job_from_payload(payload: dict) -> SucamecJob:
         return_code=payload.get("return_code"),
         output_dir=payload.get("output_dir"),
         result_file=payload.get("result_file"),
+        result_files=list(payload.get("result_files") or ([] if not payload.get("result_file") else [payload["result_file"]])),
         log_tail=payload.get("log_tail", ""),
     )
 
@@ -150,6 +171,39 @@ def _job_path(job_id: str) -> Path:
 def _save_job(job: SucamecJob) -> None:
     ensure_flow_paths()
     _job_path(job.id).write_text(json.dumps(_job_to_payload(job), ensure_ascii=False, indent=2), encoding="utf-8")
+    _cleanup_old_jobs(keep_job_id=job.id)
+
+
+def _cleanup_old_jobs(keep_job_id: str | None = None) -> int:
+    jobs_dir = _jobs_dir()
+    if not jobs_dir.exists():
+        return 0
+
+    try:
+        files = [path for path in jobs_dir.glob("*.json") if path.is_file()]
+    except Exception:
+        return 0
+
+    keep_total = _max_retained_jobs()
+    if len(files) <= keep_total:
+        return 0
+
+    protected_name = f"{keep_job_id}.json" if keep_job_id else ""
+    files.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+
+    deleted = 0
+    for path in reversed(files):
+        if path.name == protected_name:
+            continue
+        try:
+            path.unlink(missing_ok=True)
+            deleted += 1
+        except Exception:
+            continue
+        if len(files) - deleted <= keep_total:
+            break
+
+    return deleted
 
 
 def _load_job(job_id: str) -> SucamecJob | None:
@@ -189,6 +243,7 @@ def _public_job(job: SucamecJob) -> dict:
         "id": job.id,
         "grupo": job.grupo,
         "input_filename": job.input_filename,
+        "display_input_filename": _display_input_filename(job.input_filename),
         "status": job.status,
         "message": job.message,
         "created_at": job.created_at.isoformat(),
@@ -196,8 +251,14 @@ def _public_job(job: SucamecJob) -> dict:
         "finished_at": job.finished_at.isoformat() if job.finished_at else None,
         "return_code": job.return_code,
         "has_result": bool(job.result_file),
+        "result_files": [Path(path).name for path in job.result_files],
         "log_tail": job.log_tail[-4000:],
     }
+
+
+def _display_input_filename(filename: str) -> str:
+    safe_name = Path(filename or "").name
+    return re.sub(r"^entrada_\d{8}_\d{6}_", "", safe_name)
 
 
 def _resolve_input_file(filename: str) -> Path:
@@ -224,6 +285,7 @@ def _is_temporary_upload(path: Path) -> bool:
 
 
 def _cleanup_old_uploads(keep_filename: str | None = None) -> None:
+    _cleanup_expired_uploads(keep_filename=keep_filename)
     keep_name = Path(keep_filename).name if keep_filename else ""
     max_retained = _max_retained_uploads()
     candidates = [
@@ -235,6 +297,24 @@ def _cleanup_old_uploads(keep_filename: str | None = None) -> None:
 
     for path in candidates[max_retained:]:
         path.unlink(missing_ok=True)
+
+
+def _cleanup_expired_uploads(keep_filename: str | None = None) -> None:
+    input_dir = _input_dir()
+    if not input_dir.exists():
+        return
+
+    keep_name = Path(keep_filename).name if keep_filename else ""
+    expires_before = time.time() - _upload_ttl_seconds()
+
+    for path in input_dir.glob(f"{UPLOAD_PREFIX}*.xlsx"):
+        if not path.is_file() or path.name == keep_name or path.name in KEEP_INPUT_FILENAMES:
+            continue
+        try:
+            if path.stat().st_mtime < expires_before:
+                path.unlink(missing_ok=True)
+        except OSError:
+            continue
 
 
 def _cleanup_job_input(input_path: Path) -> None:
@@ -406,6 +486,52 @@ def get_result_file(job_id: str) -> Path | None:
     return path
 
 
+def get_result_files(job_id: str) -> list[Path]:
+    with _lock:
+        job = _jobs.get(job_id)
+
+    if not job:
+        job = _load_job(job_id)
+
+    if not job:
+        return []
+
+    raw_paths = job.result_files or []
+    if job.output_dir:
+        output_dir = Path(job.output_dir)
+        if output_dir.exists() and output_dir.is_dir():
+            raw_paths = [
+                str(path)
+                for path in sorted(
+                    [
+                        *output_dir.glob("RB_GADSOCarnetSUCAMEC_*.xlsx"),
+                        *output_dir.glob("RB_GADSOValidacionNoEncontradosSUCAMEC_*.xlsx"),
+                    ],
+                    key=lambda item: item.stat().st_mtime,
+                )
+            ] or raw_paths
+
+    if not raw_paths and job.result_file:
+        raw_paths = [job.result_file]
+
+    result_paths: list[Path] = []
+    lots_dir = _lots_dir().resolve()
+
+    for raw_path in raw_paths:
+        if not raw_path:
+            continue
+        path = Path(raw_path)
+        if not path.exists() or not path.is_file():
+            continue
+        try:
+            path.resolve().relative_to(lots_dir)
+        except ValueError:
+            continue
+        result_paths.append(path)
+
+    return result_paths
+
+
 def _latest_lot_dirs() -> set[Path]:
     lots_dir = _lots_dir()
     if not lots_dir.exists():
@@ -413,22 +539,25 @@ def _latest_lot_dirs() -> set[Path]:
     return {path.resolve() for path in lots_dir.iterdir() if path.is_dir()}
 
 
-def _find_newest_result(before_dirs: set[Path]) -> tuple[str | None, str | None]:
+def _find_newest_result(before_dirs: set[Path]) -> tuple[str | None, str | None, list[str]]:
     lots_dir = _lots_dir()
     candidates = [path for path in lots_dir.iterdir() if path.is_dir() and path.resolve() not in before_dirs]
     if not candidates:
         candidates = [path for path in lots_dir.iterdir() if path.is_dir()]
     if not candidates:
-        return None, None
+        return None, None, []
 
     output_dir = max(candidates, key=lambda path: path.stat().st_mtime)
     result_files = sorted(
-        output_dir.glob("RB_GADSOCarnetSUCAMEC_*.xlsx"),
+        [
+            *output_dir.glob("RB_GADSOCarnetSUCAMEC_*.xlsx"),
+            *output_dir.glob("RB_GADSOValidacionNoEncontradosSUCAMEC_*.xlsx"),
+        ],
         key=lambda path: path.stat().st_mtime,
-        reverse=True,
     )
-    result_file = result_files[0] if result_files else None
-    return str(output_dir), str(result_file) if result_file else None
+    primary_files = [path for path in result_files if path.name.startswith("RB_GADSOCarnetSUCAMEC_")]
+    result_file = primary_files[-1] if primary_files else (result_files[-1] if result_files else None)
+    return str(output_dir), str(result_file) if result_file else None, [str(path) for path in result_files]
 
 
 def _update_job(job_id: str, **changes) -> SucamecJob:
@@ -545,9 +674,10 @@ def _run_job(job_id: str) -> None:
         current_job = _load_job(job_id)
         if current_job and current_job.status == "cancelled":
             _cleanup_job_input(input_path)
+            _cleanup_old_uploads()
             return
 
-        output_dir, result_file = _find_newest_result(before_dirs)
+        output_dir, result_file, result_files = _find_newest_result(before_dirs)
         status: JobStatus = "success" if return_code == 0 else "error"
         message = "Flujo finalizado correctamente"
         if return_code == 0 and not result_file:
@@ -563,14 +693,17 @@ def _run_job(job_id: str) -> None:
             finished_at=datetime.now(),
             output_dir=output_dir,
             result_file=result_file,
+            result_files=result_files,
             log_tail="\n".join(output_tail),
         )
         _cleanup_job_input(input_path)
+        _cleanup_old_uploads()
     except Exception as exc:
         _pop_process(job_id)
         current_job = _load_job(job_id)
         if current_job and current_job.status == "cancelled":
             _cleanup_job_input(input_path)
+            _cleanup_old_uploads()
             return
 
         _update_job(
@@ -581,3 +714,4 @@ def _run_job(job_id: str) -> None:
             log_tail="\n".join(output_tail),
         )
         _cleanup_job_input(input_path)
+        _cleanup_old_uploads()

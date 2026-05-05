@@ -6,6 +6,7 @@ export interface EstadosCarneJob {
   id: string
   grupo: string
   input_filename: string
+  display_input_filename: string
   status: EstadosCarneJobStatus
   message: string
   created_at: string
@@ -13,6 +14,7 @@ export interface EstadosCarneJob {
   finished_at: string | null
   return_code: number | null
   has_result: boolean
+  result_files: string[]
   log_tail: string
 }
 

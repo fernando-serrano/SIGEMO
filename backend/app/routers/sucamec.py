@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from fastapi import APIRouter, File, Form, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from app.exceptions import AppException
-from app.services.sucamec_estados import cancel_job, create_job, get_job, get_result_file, save_input_excel
+from app.services.sucamec_estados import cancel_job, create_job, get_job, get_result_file, get_result_files, save_input_excel
 
 
 router = APIRouter(prefix="/api/sucamec", tags=["sucamec"])
@@ -61,9 +63,36 @@ def cancel_estados_carne_run(job_id: str):
 
 @router.get("/estados-carne/runs/{job_id}/download")
 def download_estados_carne_result(job_id: str):
+    result_files = get_result_files(job_id)
+    if not result_files:
+        raise AppException(404, "No hay resultado disponible para descargar")
+
+    if len(result_files) == 1:
+        path = Path(result_files[0])
+        return FileResponse(
+            path,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename=path.name,
+        )
+
+    archive = BytesIO()
+    with ZipFile(archive, mode="w", compression=ZIP_DEFLATED) as zip_file:
+        for path in result_files:
+            zip_file.write(path, arcname=path.name)
+    archive.seek(0)
+
+    return StreamingResponse(
+        archive,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="resultados_estados_{job_id}.zip"'},
+    )
+
+
+@router.get("/estados-carne/runs/{job_id}/download/primary")
+def download_estados_carne_primary_result(job_id: str):
     result_file = get_result_file(job_id)
     if not result_file:
-        raise AppException(404, "No hay resultado disponible para descargar")
+        raise AppException(404, "No hay resultado principal disponible para descargar")
 
     path = Path(result_file)
     return FileResponse(

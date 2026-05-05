@@ -12,15 +12,16 @@ import {
 } from '@/features/sucamec/api/estadosCarne.api'
 
 type FeedbackTone = 'success' | 'warning' | 'danger' | 'accent'
-type SucamecGroup = 'JV' | 'SELVA' | 'TODOS'
+type SucamecGroup = '' | 'JV' | 'SELVA' | 'TODOS'
 
 const ACTIVE_JOB_STORAGE_KEY = 'sigemo-sucamec-estados-active-job-id'
+const GLOBAL_ALERT_COLLAPSED_STORAGE_KEY = 'sigemo-sucamec-estados-alert-collapsed'
 
 const selectedInputFile = ref<File | null>(null)
 const uploadedFilename = ref('')
 const inputValidation = ref<EstadosCarneInputValidation | null>(null)
 const inputPreview = ref<EstadosCarneInputPreviewRow[]>([])
-const sucamecGroup = ref<SucamecGroup>('JV')
+const sucamecGroup = ref<SucamecGroup>('')
 const estadosJob = ref<EstadosCarneJob | null>(null)
 const estadosFeedback = ref('')
 const estadosFeedbackTone = ref<FeedbackTone>('accent')
@@ -29,6 +30,7 @@ const isStartingRun = ref(false)
 const isCancellingRun = ref(false)
 const isInitialized = ref(false)
 const isGlobalRunAlertVisible = ref(false)
+const isGlobalRunAlertCollapsed = ref(false)
 let jobPollingId: number | null = null
 let terminalAlertTimerId: number | null = null
 
@@ -49,8 +51,24 @@ const estadosDownloadUrl = computed(() =>
   estadosJob.value?.has_result ? buildEstadosCarneDownloadUrl(estadosJob.value.id) : '',
 )
 
+const estadosPanelMessage = computed(() => estadosJob.value?.message || estadosFeedback.value)
+
+const estadosPanelTone = computed<FeedbackTone>(() => {
+  if (!estadosJob.value) return estadosFeedbackTone.value
+  if (estadosJob.value.status === 'success') return 'success'
+  if (estadosJob.value.status === 'error') return 'danger'
+  if (estadosJob.value.status === 'cancelled') return 'warning'
+  return 'accent'
+})
+
 const canStartEstadosFlow = computed(() =>
-  Boolean(uploadedFilename.value && inputValidation.value?.is_valid && !isStartingRun.value && !isRunningEstadosJob.value),
+  Boolean(
+    sucamecGroup.value &&
+      uploadedFilename.value &&
+      inputValidation.value?.is_valid &&
+      !isStartingRun.value &&
+      !isRunningEstadosJob.value,
+  ),
 )
 
 const globalRunTone = computed<FeedbackTone>(() => {
@@ -63,12 +81,28 @@ const globalRunTone = computed<FeedbackTone>(() => {
 
 const globalRunMessage = computed(() => {
   if (!estadosJob.value) return ''
-  return `${estadosJob.value.message || estadosStatusLabel.value}. Grupo ${estadosJob.value.grupo}. Archivo ${estadosJob.value.input_filename}.`
+  const fileLabel = estadosJob.value.display_input_filename || estadosJob.value.input_filename
+  if (isTerminalStatus(estadosJob.value)) {
+    return `${estadosJob.value.message}. ${estadosJob.value.grupo} | ${fileLabel}`
+  }
+  return `SUCAMEC | ${estadosJob.value.grupo} | ${fileLabel}`
 })
 
 const globalRunAlertVisible = computed(() => Boolean(estadosJob.value && isGlobalRunAlertVisible.value))
 
 const isTerminalEstadosJob = computed(() => Boolean(estadosJob.value && isTerminalStatus(estadosJob.value)))
+
+const globalRunCompactLabel = computed(() => {
+  if (!estadosJob.value) return 'Estados'
+  return `Estados: ${estadosStatusLabel.value}`
+})
+
+function toneForJob(job: EstadosCarneJob): FeedbackTone {
+  if (job.status === 'success') return 'success'
+  if (job.status === 'error') return 'danger'
+  if (job.status === 'cancelled') return 'warning'
+  return 'accent'
+}
 
 function isTerminalStatus(job: EstadosCarneJob): boolean {
   return job.status === 'success' || job.status === 'error' || job.status === 'cancelled'
@@ -83,6 +117,15 @@ function persistActiveJob(job: EstadosCarneJob | null): void {
   localStorage.removeItem(ACTIVE_JOB_STORAGE_KEY)
 }
 
+function persistGlobalAlertCollapsed(): void {
+  localStorage.setItem(GLOBAL_ALERT_COLLAPSED_STORAGE_KEY, isGlobalRunAlertCollapsed.value ? '1' : '0')
+}
+
+function toggleGlobalRunAlertCollapsed(): void {
+  isGlobalRunAlertCollapsed.value = !isGlobalRunAlertCollapsed.value
+  persistGlobalAlertCollapsed()
+}
+
 function clearTerminalAlertTimer(): void {
   if (terminalAlertTimerId !== null) {
     window.clearTimeout(terminalAlertTimerId)
@@ -93,6 +136,10 @@ function clearTerminalAlertTimer(): void {
 function showGlobalRunAlert(job: EstadosCarneJob): void {
   isGlobalRunAlertVisible.value = true
   clearTerminalAlertTimer()
+  if (isTerminalStatus(job)) {
+    isGlobalRunAlertCollapsed.value = false
+    persistGlobalAlertCollapsed()
+  }
 
   if (isTerminalStatus(job)) {
     terminalAlertTimerId = window.setTimeout(() => {
@@ -112,6 +159,8 @@ function stopJobPolling(): void {
 async function refreshEstadosJob(jobId: string): Promise<void> {
   const response = await getEstadosCarneRun(jobId)
   estadosJob.value = response.job
+  estadosFeedback.value = response.job.message
+  estadosFeedbackTone.value = toneForJob(response.job)
   persistActiveJob(response.job)
   showGlobalRunAlert(response.job)
 
@@ -132,6 +181,7 @@ async function initializeEstadosRunState(): Promise<void> {
   isInitialized.value = true
 
   const storedJobId = localStorage.getItem(ACTIVE_JOB_STORAGE_KEY)
+  isGlobalRunAlertCollapsed.value = localStorage.getItem(GLOBAL_ALERT_COLLAPSED_STORAGE_KEY) === '1'
   if (!storedJobId) return
 
   try {
@@ -240,8 +290,12 @@ export function useEstadosCarneRun() {
     estadosFeedback,
     estadosFeedbackTone,
     estadosJob,
+    estadosPanelMessage,
+    estadosPanelTone,
     estadosStatusLabel,
     globalRunAlertVisible,
+    globalRunCompactLabel,
+    isGlobalRunAlertCollapsed,
     globalRunMessage,
     globalRunTone,
     handleInputFileChange,
@@ -257,6 +311,7 @@ export function useEstadosCarneRun() {
     startEstadosFlow,
     stopJobPolling,
     sucamecGroup,
+    toggleGlobalRunAlertCollapsed,
     uploadInputFile,
     uploadedFilename,
   }
