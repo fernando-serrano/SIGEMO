@@ -172,6 +172,7 @@
 }
 
 .sucamec-mini-flow {
+  --sucamec-flow-progress: 0;
   position: relative;
   display: grid;
   grid-template-columns: repeat(4, minmax(120px, 1fr));
@@ -179,15 +180,29 @@
   align-items: start;
 }
 
-.sucamec-mini-flow::before {
+.sucamec-mini-flow::before,
+.sucamec-mini-flow::after {
   content: '';
   position: absolute;
   top: 14px;
   left: calc((100% / 8));
-  right: calc((100% / 8));
   height: 2px;
-  background: color-mix(in srgb, var(--fa-color-border-accent) 34%, transparent);
   pointer-events: none;
+}
+
+.sucamec-mini-flow::before {
+  right: calc((100% / 8));
+  background: color-mix(in srgb, var(--fa-color-border-accent) 34%, transparent);
+}
+
+.sucamec-mini-flow::after {
+  width: calc(100% - 25%);
+  background: var(--fa-color-success);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--fa-color-success) 52%, transparent);
+  transform: scaleX(var(--sucamec-flow-progress));
+  transform-origin: left center;
+  transition: transform var(--fa-duration-fast) var(--fa-easing-out);
+  will-change: transform;
 }
 
 .sucamec-mini-flow--3 {
@@ -201,6 +216,11 @@
 .sucamec-mini-flow--3::before {
   left: calc(var(--sucamec-control-width) / 2);
   right: calc(var(--sucamec-control-width) / 2);
+}
+
+.sucamec-mini-flow--3::after {
+  left: calc(var(--sucamec-control-width) / 2);
+  width: calc(100% - var(--sucamec-control-width));
 }
 
 .sucamec-mini-flow__step {
@@ -296,7 +316,7 @@
   min-height: var(--sucamec-control-height);
   height: var(--sucamec-control-height);
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: 28px minmax(0, 1fr);
   align-items: center;
   gap: var(--fa-space-2);
   width: var(--sucamec-control-width);
@@ -304,6 +324,10 @@
   border: var(--fa-border-width) solid color-mix(in srgb, var(--fa-color-border) 74%, transparent);
   background: color-mix(in srgb, var(--fa-color-bg-surface-1) 44%, transparent);
   cursor: pointer;
+}
+
+.sucamec-file-card--has-preview {
+  padding-right: 50px;
 }
 
 .sucamec-file-row {
@@ -315,13 +339,31 @@
 .sucamec-file-input {
   position: absolute;
   inset: 0 42px 0 0;
+  width: auto;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  font-size: 0;
   opacity: 0;
   cursor: pointer;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.sucamec-file-input::file-selector-button {
+  width: 0;
+  padding: 0;
+  border: 0;
+  visibility: hidden;
 }
 
 .sucamec-file-icon {
-  width: 32px;
-  height: 32px;
+  position: relative;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -330,20 +372,28 @@
 }
 
 .sucamec-file-icon svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
 }
 
 .sucamec-file-content {
+  position: relative;
+  z-index: 2;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   display: grid;
-  gap: 4px;
+  gap: 2px;
+  pointer-events: none;
 }
 
 .sucamec-file-name {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
   color: var(--fa-color-text-primary);
   font-weight: var(--fa-font-weight-semibold);
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -354,7 +404,7 @@
   align-items: center;
   gap: 6px;
   color: var(--fa-color-text-secondary);
-  font-size: 0.7rem;
+  font-size: 0.64rem;
   flex-wrap: wrap;
 }
 
@@ -367,7 +417,14 @@
   height: 28px;
   padding: 0;
   transform: translateY(-50%);
-  z-index: 2;
+  z-index: 4;
+  pointer-events: auto;
+}
+
+.sucamec-file-preview-btn:hover {
+  background: color-mix(in srgb, var(--fa-color-success) 14%, transparent);
+  color: var(--fa-color-success);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--fa-color-success) 30%, transparent);
 }
 
 .sucamec-file-preview-btn svg {
@@ -411,11 +468,11 @@
 .sucamec-command-btn {
   min-height: var(--sucamec-control-height);
   height: var(--sucamec-control-height);
-  width: 260px;
+  width: 100%;
   padding-inline: 10px;
   gap: 8px;
   font-size: 0.76rem;
-  justify-self: center;
+  justify-self: stretch;
 }
 
 .sucamec-command-btn svg {
@@ -437,16 +494,66 @@
 }
 
 .sucamec-download-link {
-  width: var(--sucamec-control-width);
+  width: min(260px, 100%);
+  min-height: 34px;
+  height: 34px;
+  justify-self: center;
   justify-content: center;
+  gap: 8px;
+  padding-inline: 12px;
+  font-size: 0.72rem;
+}
+
+.sucamec-download-link svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.sucamec-feedback {
+  margin: 0;
+  padding: 10px 12px;
+  border: var(--fa-border-width) solid color-mix(in srgb, var(--fa-color-border) 72%, transparent);
+  background: color-mix(in srgb, var(--fa-color-bg-surface-1) 38%, transparent);
+  color: var(--fa-color-text-secondary);
+  font-size: var(--fa-font-size-sm);
+  line-height: 1.4;
+  text-align: left;
+}
+
+.sucamec-feedback--success {
+  border-color: color-mix(in srgb, var(--fa-color-success) 42%, transparent);
+  background: color-mix(in srgb, var(--fa-color-success) 8%, transparent);
+  color: color-mix(in srgb, var(--fa-color-success) 78%, white 22%);
+}
+
+.sucamec-feedback--warning {
+  border-color: color-mix(in srgb, var(--fa-color-warning) 42%, transparent);
+  background: color-mix(in srgb, var(--fa-color-warning) 8%, transparent);
+  color: color-mix(in srgb, var(--fa-color-warning) 82%, white 18%);
+}
+
+.sucamec-feedback--danger {
+  border-color: color-mix(in srgb, var(--fa-color-danger) 46%, transparent);
+  background: color-mix(in srgb, var(--fa-color-danger) 9%, transparent);
+  color: color-mix(in srgb, var(--fa-color-danger) 82%, white 18%);
+}
+
+.sucamec-feedback--accent {
+  border-color: color-mix(in srgb, var(--fa-color-accent) 38%, transparent);
+  background: color-mix(in srgb, var(--fa-color-accent) 7%, transparent);
+  color: color-mix(in srgb, var(--fa-color-accent) 80%, white 20%);
 }
 
 .sucamec-preview {
   display: grid;
-  gap: var(--fa-space-2);
-  padding: 12px;
-  border: var(--fa-border-width) solid color-mix(in srgb, var(--fa-color-border) 74%, transparent);
-  background: color-mix(in srgb, var(--fa-color-bg-base) 10%, transparent);
+  gap: var(--fa-space-3);
+  padding: 16px;
+  border: var(--fa-border-width) solid color-mix(in srgb, var(--fa-color-border-accent) 38%, transparent);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--fa-color-success) 5%, transparent), transparent 55%),
+    color-mix(in srgb, var(--fa-color-bg-base) 14%, transparent);
+  box-shadow: inset 3px 0 0 var(--fa-color-success);
 }
 
 .sucamec-preview__header {
@@ -455,6 +562,43 @@
   justify-content: space-between;
   gap: var(--fa-space-3);
   flex-wrap: wrap;
+}
+
+.sucamec-preview__title-group {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.sucamec-preview__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: color-mix(in srgb, var(--fa-color-success) 84%, white 16%);
+}
+
+.sucamec-preview__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--fa-color-success);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--fa-color-success) 70%, transparent);
+  flex-shrink: 0;
+}
+
+.sucamec-preview__record-badge {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  border: var(--fa-border-width) solid color-mix(in srgb, var(--fa-color-success) 46%, transparent);
+  background: color-mix(in srgb, var(--fa-color-success) 10%, transparent);
+  color: color-mix(in srgb, var(--fa-color-success) 82%, white 18%);
+  font-size: var(--fa-font-size-xs);
+  font-weight: var(--fa-font-weight-semibold);
+  letter-spacing: var(--fa-letter-spacing-caps);
+  text-transform: uppercase;
 }
 
 .table-shell {
@@ -539,6 +683,8 @@
   }
 
   .sucamec-mini-flow::before,
+  .sucamec-mini-flow::after,
+  .sucamec-mini-flow--3::after,
   .sucamec-mini-flow--3::before {
     display: none;
   }

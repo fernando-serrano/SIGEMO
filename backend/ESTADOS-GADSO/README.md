@@ -100,6 +100,7 @@ SUCAMEC_FORCE_FIRST_CAPTCHA=
 SUCAMEC_LOGIN_VALIDATION_TIMEOUT_MS=12000
 SUCAMEC_LOG_MAX_RUNS=10
 SUCAMEC_INPUT_EXCEL=
+SUCAMEC_RUN_NAME=
 SUCAMEC_MAX_RECORDS=0
 ESTADOS_GADSO_MAX_RETAINED_JOBS=10
 ```
@@ -254,6 +255,7 @@ Configuracion de workers:
 - `CARNET_WORKER_MAX_ROWS`, cuando es mayor que `0`, incrementa el numero efectivo de workers si hace falta para no exceder ese tamano aproximado por lote.
 - El Excel de entrada se carga una sola vez en el proceso orquestador; los workers reciben solo sus segmentos ya particionados.
 - `SUCAMEC_CAPTCHA_SOLVE_TIMEOUT_MS` define el timeout total para resolver captcha por OCR dentro de un intento de login.
+- `SUCAMEC_RUN_NAME` permite que una API externa asigne el nombre de corrida usado en `logs/<corrida>/` y `lotes/<corrida>/`. Si esta vacio, el flujo usa el timestamp local historico.
 - `CARNET_HEADLESS=1` ejecuta los navegadores ocultos.
 - Si `CARNET_HEADLESS=1`, el flujo desactiva internamente `HOLD_BROWSER_OPEN` para evitar retenciones incompatibles con ejecucion sin UI.
 

@@ -18,7 +18,10 @@ const isCardStatusSection = computed(() => activeSucamecSection.value === 'estad
 const {
   canStartEstadosFlow,
   estadosDownloadUrl,
+  estadosFeedbackTone,
   estadosJob,
+  estadosPanelMessage,
+  estadosPanelTone,
   estadosStatusLabel,
   handleInputFileChange: setInputFile,
   initializeEstadosRunState,
@@ -42,6 +45,7 @@ const executionSteps = [
 
 const selectedInputLabel = computed(() => selectedInputFile.value?.name || '')
 const hasGroupSelection = computed(() => Boolean(sucamecGroup.value))
+const hasInvalidInputFeedback = computed(() => Boolean(estadosPanelMessage.value && estadosFeedbackTone.value === 'danger' && !uploadedInputReady.value))
 const selectedInputSizeLabel = computed(() => {
   const size = selectedInputFile.value?.size ?? 0
   if (!size) return ''
@@ -75,6 +79,11 @@ const executionCurrentStepIndex = computed(() => {
     return 1
   }
   return 0
+})
+
+const executionFlowProgressPercent = computed(() => {
+  const completedSteps = executionSteps.filter((_, index) => isExecutionStepDone(index)).length
+  return `${Math.min(completedSteps, executionSteps.length - 1) / (executionSteps.length - 1)}`
 })
 
 function formatDateTime(value: string | null): string {
@@ -129,6 +138,11 @@ const flowCurrentStepIndex = computed(() => {
   const firstPending = states.findIndex((state) => state === 'pending' || state === 'error')
   if (firstPending <= 0) return 0
   return Math.max(0, firstPending - 1)
+})
+
+const flowProgressPercent = computed(() => {
+  const completedNodes = flowTimeline.value.filter((node) => node.state === 'done').length
+  return `${Math.min(completedNodes, flowTimeline.value.length - 1) / (flowTimeline.value.length - 1)}`
 })
 
 function isExecutionStepDone(index: number): boolean {
@@ -250,7 +264,11 @@ onBeforeUnmount(() => {
 
           <div class="card__body users-form-body">
             <div class="users-access-panel sucamec-panel-body">
-              <div class="sucamec-mini-flow sucamec-mini-flow--3" aria-label="Etapas de ejecucion">
+              <div
+                class="sucamec-mini-flow sucamec-mini-flow--3"
+                :style="{ '--sucamec-flow-progress': executionFlowProgressPercent }"
+                aria-label="Etapas de ejecucion"
+              >
                 <div
                   v-for="(step, index) in executionSteps"
                   :key="step.id"
@@ -287,7 +305,10 @@ onBeforeUnmount(() => {
               <div class="sucamec-step-panels">
                 <section class="sucamec-block sucamec-file-block">
                   <div class="sucamec-file-row">
-                    <label class="tracking-field sucamec-file-card">
+                    <label
+                      class="tracking-field sucamec-file-card"
+                      :class="{ 'sucamec-file-card--has-preview': uploadedInputReady }"
+                    >
                       <input class="input input--sm sucamec-file-input" type="file" accept=".xlsx" :disabled="isUploadingInput || isRunningEstadosJob" @change="handleInputFileChange" />
                       <span class="sucamec-file-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none">
@@ -297,11 +318,13 @@ onBeforeUnmount(() => {
                         </svg>
                       </span>
                       <span class="sucamec-file-content">
-                        <span class="sucamec-file-name">{{ selectedInputLabel || 'Selecciona un archivo Excel' }}</span>
+                        <span class="sucamec-file-name" :title="selectedInputLabel || 'Selecciona un archivo Excel'">
+                          {{ selectedInputLabel || 'Selecciona un archivo Excel' }}
+                        </span>
                         <span class="sucamec-file-meta">
                           {{ selectedInputSizeLabel || '--' }}
                           <span aria-hidden="true">•</span>
-                          {{ uploadedInputReady ? 'Archivo validado' : selectedInputFile ? 'Archivo seleccionado' : 'Pendiente' }}
+                          {{ uploadedInputReady ? 'Archivo validado' : hasInvalidInputFeedback ? 'Archivo no valido' : selectedInputFile ? 'Archivo seleccionado' : 'Pendiente' }}
                         </span>
                       </span>
                     </label>
@@ -312,7 +335,7 @@ onBeforeUnmount(() => {
                       class="btn btn--outline btn--sm btn--icon sucamec-file-preview-btn"
                       title="Ver datos cargados"
                       aria-label="Ver datos cargados"
-                      @click="openPreviewModal"
+                      @click.stop="openPreviewModal"
                     >
                       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path d="M2.5 12S6.5 5.5 12 5.5S21.5 12 21.5 12S17.5 18.5 12 18.5S2.5 12 2.5 12Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
@@ -367,6 +390,14 @@ onBeforeUnmount(() => {
                   </a>
                 </section>
               </div>
+
+              <p
+                v-if="estadosPanelMessage"
+                class="sucamec-feedback"
+                :class="`sucamec-feedback--${estadosPanelTone}`"
+              >
+                {{ estadosPanelMessage }}
+              </p>
             </div>
           </div>
         </section>
@@ -378,7 +409,11 @@ onBeforeUnmount(() => {
           </header>
 
           <div class="card__body users-form-body">
-            <div class="sucamec-mini-flow" aria-label="Progreso del flujo">
+            <div
+              class="sucamec-mini-flow"
+              :style="{ '--sucamec-flow-progress': flowProgressPercent }"
+              aria-label="Progreso del flujo"
+            >
               <div
                 v-for="(node, index) in flowTimeline"
                 :key="node.label"
@@ -461,13 +496,16 @@ onBeforeUnmount(() => {
             <div class="modal__body">
               <section class="sucamec-preview" aria-label="Previsualizacion del Excel validado">
                 <div class="sucamec-preview__header">
-                  <div>
-                    <p class="users-access-title">Excel validado</p>
+                  <div class="sucamec-preview__title-group">
+                    <p class="users-access-title sucamec-preview__title">
+                      <span class="sucamec-preview__status-dot" aria-hidden="true"></span>
+                      Excel validado
+                    </p>
                     <p class="users-access-copy">
                       Muestra de 5 filas. Columna detectada: {{ inputValidation.document_column }}.
                     </p>
                   </div>
-                  <span class="chip chip--info">{{ inputValidation.total_records }} registros</span>
+                  <span class="sucamec-preview__record-badge">{{ inputValidation.total_records }} registros</span>
                 </div>
 
                 <div class="table-shell">

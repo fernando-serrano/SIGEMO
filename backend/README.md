@@ -54,6 +54,8 @@ Variables relevantes:
 - `ESTADOS_GADSO_MAX_RETAINED_UPLOADS=0` cantidad maxima de uploads temporales `entrada_*.xlsx` que se conservan aparte del upload actual. Los archivos usados por un job se eliminan al finalizar.
 - `ESTADOS_GADSO_UPLOAD_TTL_MINUTES=60` tiempo maximo que puede quedar un upload temporal sin ejecutarse. Se poda automaticamente en nuevas operaciones de la API.
 - `ESTADOS_GADSO_MAX_RETAINED_JOBS=10` cantidad maxima de archivos JSON de ejecuciones conservados en `ESTADOS-GADSO/runtime/jobs`. Cuando se supera el limite, se elimina el JSON mas antiguo y se mantiene el job actual.
+- `ESTADOS_GADSO_MAX_CONCURRENT_JOBS=1` cantidad maxima de ejecuciones SUCAMEC activas al mismo tiempo desde la API. Protege CPU, memoria, navegadores Playwright y sesiones externas sin cambiar la logica del bot.
+- `ESTADOS_GADSO_JOB_TIMEOUT_MINUTES=120` tiempo maximo permitido para una ejecucion SUCAMEC. Si se excede, la API termina el arbol de procesos y marca el job como error operativo.
 
 Nota:
 
@@ -67,9 +69,11 @@ El submodulo `SUCAMEC > ESTADOS CARNE` ejecuta el flujo Python/Playwright desde 
 1. El usuario carga un archivo `.xlsx`.
 2. La API lo guarda en `ESTADOS-GADSO/data/entrada_data`.
 3. Al ejecutar, la API crea un job en `ESTADOS-GADSO/runtime/jobs` y pasa ese archivo por `SUCAMEC_INPUT_EXCEL`. El directorio conserva solo los ultimos `ESTADOS_GADSO_MAX_RETAINED_JOBS` JSON para evitar crecimiento indefinido.
-4. El frontend consulta el estado del job y habilita la descarga si el flujo genera resultado.
-5. La descarga apunta a los archivos generados en `ESTADOS-GADSO/lotes/<corrida>/`. Si existen el Excel principal y el de validacion, se descargan juntos en un `.zip`.
-6. Al finalizar el job, el Excel temporal cargado se elimina para evitar acumulacion en el servidor. Si el usuario carga y no ejecuta, el temporal expira segun `ESTADOS_GADSO_UPLOAD_TTL_MINUTES`; si carga otro archivo, se poda el anterior. La plantilla base `plantilla_mis_vigilantes.xlsx` se conserva.
+4. La API asigna un nombre de corrida deterministico `api_<timestamp>_<job>` mediante `SUCAMEC_RUN_NAME`; con esto el job queda asociado a su carpeta esperada en `ESTADOS-GADSO/lotes/`.
+5. La API registra un lock operativo en `ESTADOS-GADSO/runtime/locks/estados-carne.lock` mientras el proceso esta activo. El lock es trazabilidad y proteccion local para despliegues de una sola instancia.
+6. El frontend consulta el estado del job y habilita la descarga si el flujo genera resultado.
+7. La descarga apunta a los archivos generados en `ESTADOS-GADSO/lotes/<corrida>/`. Si existen el Excel principal y el de validacion, se descargan juntos en un `.zip`.
+8. Al finalizar el job, el Excel temporal cargado se elimina para evitar acumulacion en el servidor. Si el usuario carga y no ejecuta, el temporal expira segun `ESTADOS_GADSO_UPLOAD_TTL_MINUTES`; si carga otro archivo, se poda el anterior. La plantilla base `plantilla_mis_vigilantes.xlsx` se conserva.
 
 Para servidores Linux/Coder, despues de instalar dependencias:
 

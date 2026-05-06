@@ -24,6 +24,9 @@ ALLOWED_GROUPS = {"JV", "SELVA", "TODOS"}
 PREVIEW_ROWS = 5
 UPLOAD_PREFIX = "entrada_"
 KEEP_INPUT_FILENAMES = {"plantilla_mis_vigilantes.xlsx"}
+REQUIRED_INPUT_COLUMNS = {"NRO DOCUMENTO"}
+OPTIONAL_INPUT_COLUMNS = {"NOMBRE"}
+ALLOWED_INPUT_COLUMNS = REQUIRED_INPUT_COLUMNS | OPTIONAL_INPUT_COLUMNS
 
 JobStatus = Literal["queued", "running", "success", "error", "cancelled"]
 
@@ -39,6 +42,10 @@ class SucamecJob:
     started_at: datetime | None = None
     finished_at: datetime | None = None
     return_code: int | None = None
+    pid: int | None = None
+    input_path: str | None = None
+    expected_run_name: str | None = None
+    expected_output_dir: str | None = None
     output_dir: str | None = None
     result_file: str | None = None
     result_files: list[str] = field(default_factory=list)
@@ -75,6 +82,14 @@ def _runtime_dir() -> Path:
 
 def _jobs_dir() -> Path:
     return _runtime_dir() / "jobs"
+
+
+def _locks_dir() -> Path:
+    return _runtime_dir() / "locks"
+
+
+def _estados_lock_path() -> Path:
+    return _locks_dir() / "estados-carne.lock"
 
 
 def _python_executable() -> str:
@@ -124,6 +139,23 @@ def _max_retained_jobs() -> int:
         return 10
 
 
+def _max_concurrent_jobs() -> int:
+    raw_value = os.getenv("ESTADOS_GADSO_MAX_CONCURRENT_JOBS", "1").strip()
+    try:
+        return max(1, int(raw_value))
+    except ValueError:
+        return 1
+
+
+def _job_timeout_seconds() -> int:
+    raw_value = os.getenv("ESTADOS_GADSO_JOB_TIMEOUT_MINUTES", "120").strip()
+    try:
+        minutes = max(1, int(raw_value))
+    except ValueError:
+        minutes = 120
+    return minutes * 60
+
+
 def ensure_flow_paths() -> None:
     if not (_flow_dir() / "src" / "agents_flow").exists():
         raise FileNotFoundError(f"No se encontro el flujo ESTADOS-GADSO en {_flow_dir()}")
@@ -131,6 +163,7 @@ def ensure_flow_paths() -> None:
     _input_dir().mkdir(parents=True, exist_ok=True)
     _lots_dir().mkdir(parents=True, exist_ok=True)
     _jobs_dir().mkdir(parents=True, exist_ok=True)
+    _locks_dir().mkdir(parents=True, exist_ok=True)
     _cleanup_expired_uploads()
 
 
@@ -157,6 +190,10 @@ def _job_from_payload(payload: dict) -> SucamecJob:
         started_at=datetime.fromisoformat(payload["started_at"]) if payload.get("started_at") else None,
         finished_at=datetime.fromisoformat(payload["finished_at"]) if payload.get("finished_at") else None,
         return_code=payload.get("return_code"),
+        pid=payload.get("pid"),
+        input_path=payload.get("input_path"),
+        expected_run_name=payload.get("expected_run_name"),
+        expected_output_dir=payload.get("expected_output_dir"),
         output_dir=payload.get("output_dir"),
         result_file=payload.get("result_file"),
         result_files=list(payload.get("result_files") or ([] if not payload.get("result_file") else [payload["result_file"]])),
@@ -250,6 +287,8 @@ def _public_job(job: SucamecJob) -> dict:
         "started_at": job.started_at.isoformat() if job.started_at else None,
         "finished_at": job.finished_at.isoformat() if job.finished_at else None,
         "return_code": job.return_code,
+        "pid": job.pid,
+        "expected_run_name": job.expected_run_name,
         "has_result": bool(job.result_file),
         "result_files": [Path(path).name for path in job.result_files],
         "log_tail": job.log_tail[-4000:],
@@ -322,6 +361,69 @@ def _cleanup_job_input(input_path: Path) -> None:
         input_path.unlink(missing_ok=True)
 
 
+def _active_jobs_count() -> int:
+    active_statuses = {"queued", "running"}
+    active_count = 0
+
+    with _lock:
+        active_count += sum(1 for job in _jobs.values() if job.status in active_statuses)
+
+    jobs_dir = _jobs_dir()
+    if not jobs_dir.exists():
+        return active_count
+
+    seen_job_ids = set()
+    with _lock:
+        seen_job_ids.update(_jobs.keys())
+
+    for path in jobs_dir.glob("*.json"):
+        job_id = path.stem
+        if job_id in seen_job_ids:
+            continue
+        job = _load_job(job_id)
+        if job and job.status in active_statuses:
+            active_count += 1
+
+    return active_count
+
+
+def _ensure_concurrency_capacity() -> None:
+    ensure_flow_paths()
+    max_concurrent = _max_concurrent_jobs()
+    if _active_jobs_count() >= max_concurrent:
+        raise ValueError(
+            "Ya existe una ejecucion SUCAMEC en curso. "
+            "Espera a que finalice o ajusta ESTADOS_GADSO_MAX_CONCURRENT_JOBS."
+        )
+
+
+def _write_lock_file(job: SucamecJob) -> None:
+    lock_path = _estados_lock_path()
+    lock_payload = {
+        "job_id": job.id,
+        "grupo": job.grupo,
+        "pid": job.pid,
+        "started_at": _serialize_datetime(job.started_at),
+        "input_filename": job.input_filename,
+    }
+    lock_path.write_text(json.dumps(lock_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _clear_lock_file(job_id: str) -> None:
+    lock_path = _estados_lock_path()
+    if not lock_path.exists():
+        return
+
+    try:
+        payload = json.loads(lock_path.read_text(encoding="utf-8"))
+        if str(payload.get("job_id", "")) != job_id:
+            return
+    except Exception:
+        pass
+
+    lock_path.unlink(missing_ok=True)
+
+
 def _normalize_header(value: Any) -> str:
     text = str(value or "").strip().upper()
     return re.sub(r"\s+", " ", text)
@@ -358,15 +460,22 @@ def _validate_input_excel(path: Path) -> dict:
 
         headers = [_normalize_header(cell.value) for cell in header_cells]
         header_map = {header: index for index, header in enumerate(headers) if header}
-        document_index = header_map.get("NRO DOCUMENTO")
-        if document_index is None:
-            document_index = header_map.get("DNI")
+        detected_columns = [header for header in headers if header]
+        unexpected_columns = [header for header in detected_columns if header not in ALLOWED_INPUT_COLUMNS]
+        missing_columns = [header for header in REQUIRED_INPUT_COLUMNS if header not in header_map]
 
-        if document_index is None:
+        if missing_columns:
             raise ValueError(
-                "El Excel debe contener la columna NRO DOCUMENTO. Tambien se acepta DNI."
+                "Formato invalido. El Excel debe tener la columna obligatoria NRO DOCUMENTO y, opcionalmente, NOMBRE."
             )
 
+        if unexpected_columns:
+            raise ValueError(
+                "Formato invalido. Solo se aceptan las columnas NRO DOCUMENTO y NOMBRE. "
+                f"Columnas no permitidas: {', '.join(unexpected_columns)}."
+            )
+
+        document_index = header_map["NRO DOCUMENTO"]
         preview: list[dict[str, str | int]] = []
         omitted_rows: list[int] = []
         total_records = 0
@@ -394,9 +503,9 @@ def _validate_input_excel(path: Path) -> dict:
         return {
             "validation": {
                 "is_valid": True,
-                "required_columns": ["NRO DOCUMENTO"],
-                "detected_columns": [header for header in headers if header],
-                "document_column": "NRO DOCUMENTO" if "NRO DOCUMENTO" in header_map else "DNI",
+                "required_columns": sorted(REQUIRED_INPUT_COLUMNS),
+                "detected_columns": detected_columns,
+                "document_column": "NRO DOCUMENTO",
                 "total_records": total_records,
                 "omitted_rows": omitted_rows[:25],
                 "omitted_rows_count": len(omitted_rows),
@@ -445,8 +554,19 @@ def create_job(grupo: str, input_filename: str) -> dict:
     if grupo_normalized not in ALLOWED_GROUPS:
         raise ValueError("Grupo invalido")
 
-    _validate_input_excel(_resolve_input_file(input_filename))
-    job = SucamecJob(id=uuid.uuid4().hex, grupo=grupo_normalized, input_filename=Path(input_filename).name)
+    _ensure_concurrency_capacity()
+    input_path = _resolve_input_file(input_filename)
+    _validate_input_excel(input_path)
+    job_id = uuid.uuid4().hex
+    expected_run_name = f"api_{datetime.now():%Y%m%d_%H%M%S}_{job_id[:8]}"
+    job = SucamecJob(
+        id=job_id,
+        grupo=grupo_normalized,
+        input_filename=Path(input_filename).name,
+        input_path=str(input_path),
+        expected_run_name=expected_run_name,
+        expected_output_dir=str(_lots_dir() / expected_run_name),
+    )
     _store_job(job)
 
     thread = threading.Thread(target=_run_job, args=(job.id,), daemon=True)
@@ -539,15 +659,10 @@ def _latest_lot_dirs() -> set[Path]:
     return {path.resolve() for path in lots_dir.iterdir() if path.is_dir()}
 
 
-def _find_newest_result(before_dirs: set[Path]) -> tuple[str | None, str | None, list[str]]:
-    lots_dir = _lots_dir()
-    candidates = [path for path in lots_dir.iterdir() if path.is_dir() and path.resolve() not in before_dirs]
-    if not candidates:
-        candidates = [path for path in lots_dir.iterdir() if path.is_dir()]
-    if not candidates:
+def _collect_result_files(output_dir: Path) -> tuple[str | None, str | None, list[str]]:
+    if not output_dir.exists() or not output_dir.is_dir():
         return None, None, []
 
-    output_dir = max(candidates, key=lambda path: path.stat().st_mtime)
     result_files = sorted(
         [
             *output_dir.glob("RB_GADSOCarnetSUCAMEC_*.xlsx"),
@@ -558,6 +673,23 @@ def _find_newest_result(before_dirs: set[Path]) -> tuple[str | None, str | None,
     primary_files = [path for path in result_files if path.name.startswith("RB_GADSOCarnetSUCAMEC_")]
     result_file = primary_files[-1] if primary_files else (result_files[-1] if result_files else None)
     return str(output_dir), str(result_file) if result_file else None, [str(path) for path in result_files]
+
+
+def _find_newest_result(before_dirs: set[Path], expected_output_dir: str | None = None) -> tuple[str | None, str | None, list[str]]:
+    if expected_output_dir:
+        expected_result = _collect_result_files(Path(expected_output_dir))
+        if expected_result[1] or expected_result[2]:
+            return expected_result
+
+    lots_dir = _lots_dir()
+    candidates = [path for path in lots_dir.iterdir() if path.is_dir() and path.resolve() not in before_dirs]
+    if not candidates:
+        candidates = [path for path in lots_dir.iterdir() if path.is_dir()]
+    if not candidates:
+        return None, None, []
+
+    output_dir = max(candidates, key=lambda path: path.stat().st_mtime)
+    return _collect_result_files(output_dir)
 
 
 def _update_job(job_id: str, **changes) -> SucamecJob:
@@ -616,6 +748,7 @@ def cancel_job(job_id: str) -> dict:
         message="Ejecucion cancelada por el usuario",
         finished_at=datetime.now(),
     )
+    _clear_lock_file(job_id)
     return _public_job(updated)
 
 
@@ -639,6 +772,8 @@ def _run_job(job_id: str) -> None:
     env.setdefault("SUCAMEC_HEADLESS", "1")
     env.setdefault("HOLD_BROWSER_OPEN", "0")
     env["SUCAMEC_INPUT_EXCEL"] = str(input_path)
+    if job.expected_run_name:
+        env["SUCAMEC_RUN_NAME"] = job.expected_run_name
 
     output_tail: list[str] = []
 
@@ -661,8 +796,21 @@ def _run_job(job_id: str) -> None:
             **popen_kwargs,
         )
         _store_process(job_id, process)
+        _update_job(job_id, pid=process.pid, input_path=str(input_path), expected_output_dir=job.expected_output_dir)
+        _write_lock_file(_load_job(job_id) or job)
 
         assert process.stdout is not None
+        timed_out = False
+
+        def _mark_timeout_and_terminate() -> None:
+            nonlocal timed_out
+            timed_out = True
+            _terminate_process_tree(process)
+
+        timeout_timer = threading.Timer(_job_timeout_seconds(), _mark_timeout_and_terminate)
+        timeout_timer.daemon = True
+        timeout_timer.start()
+
         for line in process.stdout:
             output_tail.append(line.rstrip())
             if len(output_tail) > 200:
@@ -670,20 +818,25 @@ def _run_job(job_id: str) -> None:
             _update_job(job_id, log_tail="\n".join(output_tail))
 
         return_code = process.wait()
+        timeout_timer.cancel()
         _pop_process(job_id)
         current_job = _load_job(job_id)
         if current_job and current_job.status == "cancelled":
             _cleanup_job_input(input_path)
             _cleanup_old_uploads()
+            _clear_lock_file(job_id)
             return
 
-        output_dir, result_file, result_files = _find_newest_result(before_dirs)
+        output_dir, result_file, result_files = _find_newest_result(before_dirs, job.expected_output_dir)
         status: JobStatus = "success" if return_code == 0 else "error"
         message = "Flujo finalizado correctamente"
+        if timed_out:
+            output_tail.append("Timeout operativo alcanzado; proceso cancelado por el backend.")
+            message = "El flujo excedio el tiempo maximo configurado"
         if return_code == 0 and not result_file:
             message = "Flujo finalizado, pero no se encontro Excel de salida"
         elif return_code != 0:
-            message = "El flujo termino con error"
+            message = message if "tiempo maximo" in message else "El flujo termino con error"
 
         _update_job(
             job_id,
@@ -698,6 +851,7 @@ def _run_job(job_id: str) -> None:
         )
         _cleanup_job_input(input_path)
         _cleanup_old_uploads()
+        _clear_lock_file(job_id)
     except Exception as exc:
         _pop_process(job_id)
         current_job = _load_job(job_id)
@@ -715,3 +869,4 @@ def _run_job(job_id: str) -> None:
         )
         _cleanup_job_input(input_path)
         _cleanup_old_uploads()
+        _clear_lock_file(job_id)

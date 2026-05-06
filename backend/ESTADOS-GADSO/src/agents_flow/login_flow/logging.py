@@ -86,7 +86,8 @@ class RunLoggers:
     def __init__(self, logs_dir: Path, run_name: str | None = None, scope_name: str | None = None):
         logs_dir.mkdir(parents=True, exist_ok=True)
         self.logs_dir = logs_dir
-        self.run_name = run_name or datetime.now().strftime("%Y%m%d_%H%M%S")
+        configured_run_name = str(os.getenv("SUCAMEC_RUN_NAME", "") or "").strip()
+        self.run_name = run_name or configured_run_name or datetime.now().strftime("%Y%m%d_%H%M%S")
         self.run_dir = logs_dir / self.run_name
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.scope_name = str(scope_name or "").strip()
