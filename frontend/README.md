@@ -34,6 +34,26 @@ pnpm build
 pnpm lint
 ```
 
+## Arquitectura Frontend
+
+La aplicacion sigue una separacion por capas:
+
+- `src/app`: bootstrap, router y estilos globales.
+- `src/pages`: paginas que orquestan rutas y componen features.
+- `src/features`: modulos funcionales con `api`, `components`, `composables`, `types` y `styles` propios.
+- `src/shared`: infraestructura reutilizable como cliente HTTP, sesion, layouts, componentes y composables comunes.
+
+Specs de arquitectura:
+
+- `specs/0001-frontend-architecture-boundaries.md`
+
+Reglas actuales:
+
+- La sesion vive en `src/shared/session/session.ts`.
+- Las llamadas HTTP deben pasar por `src/shared/api/client.ts`.
+- El comportamiento responsive del sidebar vive en `src/shared/composables/useResponsiveSidebar.ts`.
+- Cada modulo debe mantener su logica funcional dentro de `src/features/<modulo>`.
+
 ## Modulo Usuarios
 
 La vista `USUARIOS / Usuarios` concentra el mantenimiento de usuarios, roles y permisos desde `src/pages/UsersPage.vue` y `src/features/users/components/UsersSubmodulePanel.vue`.

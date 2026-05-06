@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import AppSidebar from '@/features/navigation/components/AppSidebar.vue'
@@ -25,6 +25,7 @@ import type {
   RolePayload,
   UserPayload,
 } from '@/features/users/types'
+import { useResponsiveSidebar } from '@/shared/composables/useResponsiveSidebar'
 import AppShell from '@/shared/layouts/AppShell.vue'
 
 type FeedbackTone = 'success' | 'warning' | 'danger' | 'accent'
@@ -34,9 +35,8 @@ type PermissionFieldKey = 'codigo' | 'nombre' | 'modulo' | 'accion'
 
 const route = useRoute()
 const router = useRouter()
-const mobileBreakpoint = window.matchMedia('(max-width: 1080px)')
 
-const isSidebarOpen = ref(false)
+const { isSidebarOpen, openSidebar, closeSidebar } = useResponsiveSidebar()
 const isLoading = ref(true)
 const loadError = ref('')
 const userFeedback = ref('')
@@ -520,20 +520,6 @@ function describeEffectivePermissionCount(user: AccessUser): string {
   return `${user.effective_permission_ids.length} permiso${user.effective_permission_ids.length === 1 ? '' : 's'}`
 }
 
-function openSidebar(): void {
-  isSidebarOpen.value = true
-}
-
-function closeSidebar(): void {
-  isSidebarOpen.value = false
-}
-
-function handleViewportChange(event: MediaQueryListEvent): void {
-  if (!event.matches) {
-    closeSidebar()
-  }
-}
-
 function resetForm(): void {
   form.username = ''
   form.password_hash = ''
@@ -975,18 +961,9 @@ watch(
 )
 
 onMounted(() => {
-  if (mobileBreakpoint.matches) {
-    closeSidebar()
-  }
-
-  mobileBreakpoint.addEventListener('change', handleViewportChange)
   void loadModuleData()
   startCreateRole()
   startCreatePermission()
-})
-
-onBeforeUnmount(() => {
-  mobileBreakpoint.removeEventListener('change', handleViewportChange)
 })
 </script>
 

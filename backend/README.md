@@ -48,6 +48,8 @@ Variables relevantes:
 - `MONGODB_ROLE_PERMISSIONS_COLLECTION=roles_permisos`
 - `MONGODB_USER_PERMISSIONS_COLLECTION=usuarios_permisos`
 - `CORS_ORIGINS=http://localhost:4002,http://127.0.0.1:4002` origenes permitidos para el frontend, separados por coma.
+- `AUTH_SECRET_KEY=` secreto de firma para tokens de sesion internos. En servidor debe ser un valor propio del entorno y no versionado.
+- `AUTH_ACCESS_TOKEN_MINUTES=480` duracion de la sesion web. Por defecto equivale a una jornada operativa de 8 horas.
 - `ESTADOS_GADSO_DIR=./ESTADOS-GADSO`
 - `ESTADOS_GADSO_PYTHON=` opcional; permite apuntar a otro interprete/venv para el flujo Playwright. Si esta vacio, la API busca automaticamente `ESTADOS-GADSO/.venv/Scripts/python.exe` en Windows o `ESTADOS-GADSO/.venv/bin/python` en Linux.
 - `ESTADOS_GADSO_MAX_UPLOAD_MB=50`
@@ -60,7 +62,8 @@ Variables relevantes:
 Nota:
 
 - El nombre actual de base de datos `sigemo_db` se mantiene por compatibilidad tecnica en esta etapa del refactor.
-- Las credenciales del flujo SUCAMEC no se versionan. En despliegue pueden vivir como variables del entorno o en `backend/ESTADOS-GADSO/.env` dentro del workspace/servidor.
+- Las credenciales del flujo SUCAMEC no se versionan. Al ser una aplicacion interna, en despliegue pueden vivir como variables del entorno o en `backend/ESTADOS-GADSO/.env` dentro del workspace/servidor controlado por la empresa. Ver `specs/0003-backend-deploy-readiness.md`.
+- Las rutas privadas de usuarios y SUCAMEC requieren token `Bearer`. El login conserva el contrato heredado y agrega `access_token` para que el frontend lo envie en las siguientes solicitudes. Ver `specs/0004-backend-session-auth.md`.
 
 ## Flujo ESTADOS-GADSO
 
@@ -109,6 +112,24 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 4001
 # Desactivar entorno virtual
 deactivate
 ```
+
+## Quality Gates
+
+Dependencias de desarrollo:
+
+```bash
+python -m pip install -r requirements-dev.txt
+```
+
+Verificaciones:
+
+```bash
+python -m pytest
+python -m ruff check app tests
+python -m compileall app ESTADOS-GADSO/src
+```
+
+La puerta inicial de cobertura esta documentada en `specs/0002-backend-quality-gates.md`. El umbral arranca en 15% para no bloquear por deuda heredada y debe subir por fases hasta 70% antes de considerar el backend listo para produccion con cambios frecuentes.
 
 ## Endpoint de login
 

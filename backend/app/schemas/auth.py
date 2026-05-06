@@ -23,3 +23,6 @@ class LoginResponse(BaseModel):
     ok: bool
     message: str | None = None
     user: LoginUser | None = None
+    access_token: str | None = None
+    token_type: str = "bearer"
+    expires_in: int | None = None

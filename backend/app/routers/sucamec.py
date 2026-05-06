@@ -4,14 +4,15 @@ from io import BytesIO
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
+from app.dependencies import require_auth
 from app.exceptions import AppException
 from app.services.sucamec_estados import cancel_job, create_job, get_job, get_result_file, get_result_files, save_input_excel
 
 
-router = APIRouter(prefix="/api/sucamec", tags=["sucamec"])
+router = APIRouter(prefix="/api/sucamec", tags=["sucamec"], dependencies=[Depends(require_auth)])
 
 
 @router.post("/estados-carne/upload")

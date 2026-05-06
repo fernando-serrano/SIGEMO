@@ -21,4 +21,7 @@ export interface LoginApiResponse {
   ok: boolean
   message?: string
   user?: LoginUser
+  access_token?: string
+  token_type?: string
+  expires_in?: number
 }

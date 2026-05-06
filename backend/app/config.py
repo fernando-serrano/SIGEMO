@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     role_permissions_collection: str = "roles_permisos"
     user_permissions_collection: str = "usuarios_permisos"
     cors_origins: str = "http://localhost:4002,http://127.0.0.1:4002"
+    auth_secret_key: str = ""
+    auth_access_token_minutes: int = 480
 
     @property
     def allowed_cors_origins(self) -> list[str]:
@@ -28,6 +30,8 @@ class Settings(BaseSettings):
             self.db_name = self._infer_db_name_from_url(self.database_url)
         if not self.db_name:
             raise RuntimeError("No se pudo resolver MONGODB_DB_NAME")
+        if not self.auth_secret_key:
+            self.auth_secret_key = self.database_url
 
     def _infer_db_name_from_url(self, url: str) -> str:
         try:

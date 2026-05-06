@@ -1,5 +1,6 @@
 import type { LoginApiResponse, LoginPayload, LoginUser } from '../types'
 import { apiClient } from '@/shared/api/client'
+import { saveAccessToken } from '@/shared/session/session'
 
 export async function login(payload: LoginPayload): Promise<LoginUser> {
   try {
@@ -10,6 +11,10 @@ export async function login(payload: LoginPayload): Promise<LoginUser> {
 
     if (!result.ok || !result.user) {
       throw new Error(result.message || 'No se pudo iniciar sesion')
+    }
+
+    if (result.access_token) {
+      saveAccessToken(result.access_token)
     }
 
     return result.user

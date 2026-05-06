@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
 from pymongo.collection import Collection
 
+from app.config import settings
 from app.db import get_roles_collection_dep, get_user_roles_collection_dep, get_users_collection_dep
 from app.exceptions import AppException
 from app.schemas.auth import LoginRequest, LoginResponse, LoginUser
 from app.utils.access import build_display_name, build_object_id_candidates, is_relation_active, normalize_active_state
-from app.utils.security import is_password_hash, verify_password, hash_password
+from app.utils.auth_tokens import create_access_token
+from app.utils.security import hash_password, is_password_hash, verify_password
 
 router = APIRouter(prefix="/api", tags=["auth"])
 
@@ -88,5 +89,13 @@ def login(
         role=resolved_role_code,
         role_name=resolved_role_name,
     )
+    expires_in = max(1, settings.auth_access_token_minutes) * 60
+    access_token = create_access_token(
+        subject=response_user.id,
+        username=response_user.username,
+        role=response_user.role,
+        secret_key=settings.auth_secret_key,
+        expires_in_seconds=expires_in,
+    )
 
-    return LoginResponse(ok=True, user=response_user)
+    return LoginResponse(ok=True, user=response_user, access_token=access_token, token_type="bearer", expires_in=expires_in)

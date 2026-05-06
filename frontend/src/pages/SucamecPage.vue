@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import TrackingPageHeader from '@/features/dashboard/components/TrackingPageHeader.vue'
 import AppSidebar from '@/features/navigation/components/AppSidebar.vue'
 import { useEstadosCarneRun } from '@/features/sucamec/composables/useEstadosCarneRun'
+import { useResponsiveSidebar } from '@/shared/composables/useResponsiveSidebar'
 import AppShell from '@/shared/layouts/AppShell.vue'
 
 const route = useRoute()
-const mobileBreakpoint = window.matchMedia('(max-width: 1080px)')
-const isSidebarOpen = ref(false)
+const { isSidebarOpen, openSidebar, closeSidebar } = useResponsiveSidebar()
 const isUploadConfirmModalOpen = ref(false)
 const isPreviewModalOpen = ref(false)
 const activeSucamecSection = computed(() => String(route.meta.sucamecSection ?? 'panel'))
@@ -155,20 +155,6 @@ function isExecutionStepActive(index: number): boolean {
   return index === executionCurrentStepIndex.value
 }
 
-function openSidebar(): void {
-  isSidebarOpen.value = true
-}
-
-function closeSidebar(): void {
-  isSidebarOpen.value = false
-}
-
-function handleViewportChange(event: MediaQueryListEvent): void {
-  if (!event.matches) {
-    closeSidebar()
-  }
-}
-
 function handleInputFileChange(event: Event): void {
   const input = event.target as HTMLInputElement
   setInputFile(input.files?.[0] ?? null)
@@ -205,16 +191,6 @@ function closePreviewModal(): void {
 
 onMounted(() => {
   void initializeEstadosRunState()
-
-  if (mobileBreakpoint.matches) {
-    closeSidebar()
-  }
-
-  mobileBreakpoint.addEventListener('change', handleViewportChange)
-})
-
-onBeforeUnmount(() => {
-  mobileBreakpoint.removeEventListener('change', handleViewportChange)
 })
 </script>
 

@@ -6,6 +6,7 @@ import LoginFormCard from '@/features/auth/components/LoginFormCard.vue'
 import LoginHeroPanel from '@/features/auth/components/LoginHeroPanel.vue'
 import LoginThemeSwitcher from '@/features/auth/components/LoginThemeSwitcher.vue'
 import type { LoginUser, ThemeName } from '@/features/auth/types'
+import { saveSessionUser } from '@/shared/session/session'
 
 const router = useRouter()
 const route = useRoute()
@@ -21,7 +22,7 @@ function applyTheme(selectedTheme: ThemeName): void {
 }
 
 function onLoginSuccess(user: LoginUser): void {
-  sessionStorage.setItem('sigemo-user', JSON.stringify(user))
+  saveSessionUser(user)
   const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/') ? route.query.redirect : '/inicio'
   void router.push(redirect)
 }

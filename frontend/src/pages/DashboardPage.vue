@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 
 import TrackingFiltersPanel from '@/features/dashboard/components/TrackingFiltersPanel.vue'
 import TrackingPageHeader from '@/features/dashboard/components/TrackingPageHeader.vue'
@@ -7,7 +7,9 @@ import TrackingResultsTable from '@/features/dashboard/components/TrackingResult
 import { mockTrackingRows } from '@/features/dashboard/mock/trackingRows'
 import AppSidebar from '@/features/navigation/components/AppSidebar.vue'
 import type { TrackingFilters } from '@/features/dashboard/types'
+import { useResponsiveSidebar } from '@/shared/composables/useResponsiveSidebar'
 import AppShell from '@/shared/layouts/AppShell.vue'
+import { readSessionUser } from '@/shared/session/session'
 
 interface UserSession {
   rol_id?: string | number
@@ -15,7 +17,6 @@ interface UserSession {
 }
 
 const rolesWithDetailAccess = new Set(['ADMIN', 'SUPERVISOR', 'RRHH'])
-const mobileBreakpoint = window.matchMedia('(max-width: 1080px)')
 
 const appliedFilters = ref<TrackingFilters>({
   documentNumber: '',
@@ -23,27 +24,22 @@ const appliedFilters = ref<TrackingFilters>({
   unit: '',
   recruiter: '',
 })
-const isSidebarOpen = ref(false)
+const { isSidebarOpen, openSidebar, closeSidebar } = useResponsiveSidebar()
 
 const canViewDetail = computed(() => {
-  const raw = sessionStorage.getItem('sigemo-user')
+  const parsed = readSessionUser<UserSession>()
 
-  if (!raw) {
+  if (!parsed) {
     return true
   }
 
-  try {
-    const parsed = JSON.parse(raw) as UserSession
-    const roleValue = String(parsed.role ?? parsed.rol_id ?? '').trim().toUpperCase()
+  const roleValue = String(parsed.role ?? parsed.rol_id ?? '').trim().toUpperCase()
 
-    if (!roleValue) {
-      return true
-    }
-
-    return rolesWithDetailAccess.has(roleValue)
-  } catch {
+  if (!roleValue) {
     return true
   }
+
+  return rolesWithDetailAccess.has(roleValue)
 })
 
 const filteredRows = computed(() => {
@@ -66,31 +62,6 @@ function handleApplyFilters(filters: TrackingFilters): void {
   appliedFilters.value = filters
 }
 
-function openSidebar(): void {
-  isSidebarOpen.value = true
-}
-
-function closeSidebar(): void {
-  isSidebarOpen.value = false
-}
-
-function handleViewportChange(event: MediaQueryListEvent): void {
-  if (!event.matches) {
-    closeSidebar()
-  }
-}
-
-onMounted(() => {
-  if (mobileBreakpoint.matches) {
-    closeSidebar()
-  }
-
-  mobileBreakpoint.addEventListener('change', handleViewportChange)
-})
-
-onBeforeUnmount(() => {
-  mobileBreakpoint.removeEventListener('change', handleViewportChange)
-})
 </script>
 
 <template>

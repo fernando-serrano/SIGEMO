@@ -1,4 +1,5 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() ?? ''
+import { apiClient } from '@/shared/api/client'
+import { getAccessToken } from '@/shared/session/session'
 
 export type EstadosCarneJobStatus = 'queued' | 'running' | 'success' | 'error' | 'cancelled'
 
@@ -59,31 +60,11 @@ interface CancelResponse {
   job: EstadosCarneJob
 }
 
-function buildApiUrl(path: string): string {
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  return API_BASE_URL ? `${API_BASE_URL.replace(/\/$/, '')}${normalizedPath}` : normalizedPath
-}
-
-async function parseJsonResponse<T>(response: Response): Promise<T> {
-  const data = await response.json()
-
-  if (!response.ok || data?.ok === false) {
-    throw new Error(data?.message || 'No se pudo completar la solicitud')
-  }
-
-  return data as T
-}
-
 export async function uploadEstadosCarneInput(file: File): Promise<UploadResponse> {
   const formData = new FormData()
   formData.append('file', file)
 
-  const response = await fetch(buildApiUrl('/api/sucamec/estados-carne/upload'), {
-    method: 'POST',
-    body: formData,
-  })
-
-  return parseJsonResponse<UploadResponse>(response)
+  return apiClient.postForm<UploadResponse>('/api/sucamec/estados-carne/upload', formData)
 }
 
 export async function startEstadosCarneRun(grupo: string, inputFilename: string): Promise<RunResponse> {
@@ -91,27 +72,19 @@ export async function startEstadosCarneRun(grupo: string, inputFilename: string)
   formData.append('grupo', grupo)
   formData.append('input_filename', inputFilename)
 
-  const response = await fetch(buildApiUrl('/api/sucamec/estados-carne/runs'), {
-    method: 'POST',
-    body: formData,
-  })
-
-  return parseJsonResponse<RunResponse>(response)
+  return apiClient.postForm<RunResponse>('/api/sucamec/estados-carne/runs', formData)
 }
 
 export async function getEstadosCarneRun(jobId: string): Promise<JobResponse> {
-  const response = await fetch(buildApiUrl(`/api/sucamec/estados-carne/runs/${jobId}`))
-  return parseJsonResponse<JobResponse>(response)
+  return apiClient.get<JobResponse>(`/api/sucamec/estados-carne/runs/${jobId}`)
 }
 
 export async function cancelEstadosCarneRun(jobId: string): Promise<CancelResponse> {
-  const response = await fetch(buildApiUrl(`/api/sucamec/estados-carne/runs/${jobId}/cancel`), {
-    method: 'POST',
-  })
-
-  return parseJsonResponse<CancelResponse>(response)
+  return apiClient.post<CancelResponse>(`/api/sucamec/estados-carne/runs/${jobId}/cancel`)
 }
 
 export function buildEstadosCarneDownloadUrl(jobId: string): string {
-  return buildApiUrl(`/api/sucamec/estados-carne/runs/${jobId}/download`)
+  const token = getAccessToken()
+  const tokenQuery = token ? `?access_token=${encodeURIComponent(token)}` : ''
+  return apiClient.buildUrl(`/api/sucamec/estados-carne/runs/${jobId}/download${tokenQuery}`)
 }

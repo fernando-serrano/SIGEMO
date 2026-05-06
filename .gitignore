@@ -9,7 +9,12 @@ backend/build/
 
 # Cobertura y caches
 **/coverage/
+**/.coverage
 **/.cache/
+**/.pytest_cache/
+**/.pytest_tmp/
+**/pytest-cache-files-*/
+**/tests/.tmp/
 **/.eslintcache
 **/*.tsbuildinfo
 **/__pycache__/

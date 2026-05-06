@@ -1,19 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-const SESSION_STORAGE_KEY = 'sigemo-user'
-
-function hasActiveSession(): boolean {
-  const rawSession = sessionStorage.getItem(SESSION_STORAGE_KEY)
-  if (!rawSession) return false
-
-  try {
-    const session = JSON.parse(rawSession) as { id?: string; username?: string }
-    return Boolean(session.id || session.username)
-  } catch {
-    sessionStorage.removeItem(SESSION_STORAGE_KEY)
-    return false
-  }
-}
+import { hasActiveSession } from '@/shared/session/session'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),

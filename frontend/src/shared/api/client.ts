@@ -1,3 +1,5 @@
+import { clearSession, getAccessToken } from '@/shared/session/session'
+
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim()
 
 export interface ApiClientOptions extends RequestInit {
@@ -13,7 +15,7 @@ export class ApiClient {
     this.baseUrl = baseUrl || ''
   }
 
-  private buildUrl(path: string): string {
+  buildUrl(path: string): string {
     const normalizedPath = path.startsWith('/') ? path : `/${path}`
     
     if (!this.baseUrl) {
@@ -55,6 +57,14 @@ export class ApiClient {
     return this.request<T>(path, { ...options, method: 'DELETE' })
   }
 
+  async postForm<T>(path: string, formData: FormData, options?: ApiClientOptions): Promise<T> {
+    return this.request<T>(path, {
+      ...options,
+      method: 'POST',
+      body: formData,
+    })
+  }
+
   private async request<T>(path: string, options?: ApiClientOptions): Promise<T> {
     const url = this.buildUrl(path)
     const maxRetries = options?.maxRetries ?? 0
@@ -84,8 +94,11 @@ export class ApiClient {
   }
 
   private async fetchWithDefaults(url: string, options?: ApiClientOptions): Promise<Response> {
+    const token = getAccessToken()
+    const isFormDataBody = options?.body instanceof FormData
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+      ...(isFormDataBody ? {} : { 'Content-Type': 'application/json' }),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options?.headers as Record<string, string> || {}),
     }
 
@@ -111,7 +124,10 @@ export class ApiClient {
     try {
       const data = JSON.parse(text) as T
       
-      if (!response.ok && (data as any).ok === false) {
+      if (!response.ok) {
+        if (response.status === 401) {
+          clearSession()
+        }
         throw new Error((data as any).message || 'Error en la solicitud')
       }
 

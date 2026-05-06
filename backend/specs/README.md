@@ -14,3 +14,6 @@ El objetivo es concentrar decisiones, alcance, riesgos y criterios de aceptacion
 ## Specs Actuales
 
 - `0001-estados-gadso-job-guardrails.md`: guardrails operativos para ejecuciones SUCAMEC desde FastAPI.
+- `0002-backend-quality-gates.md`: puerta inicial de calidad con pytest, cobertura y ruff.
+- `0003-backend-deploy-readiness.md`: checklist de despliegue interno y criterios minimos operativos.
+- `0004-backend-session-auth.md`: autenticacion de sesion interna con token firmado y proteccion de endpoints.

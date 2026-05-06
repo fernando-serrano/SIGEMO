@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 
 import type { ThemeName } from '@/features/auth/types'
 import AppBrandLogo from '@/shared/components/AppBrandLogo.vue'
+import { clearSession, readSessionUser } from '@/shared/session/session'
 import AppSidebarMenu from './AppSidebarMenu.vue'
 
 interface UserSession {
@@ -96,17 +97,7 @@ const logoutAction: SidebarItem = {
 }
 
 const userSession = computed<UserSession>(() => {
-  const raw = sessionStorage.getItem('sigemo-user')
-
-  if (!raw) {
-    return { username: 'usuario', fullname: 'Usuario MGA GADSO' }
-  }
-
-  try {
-    return JSON.parse(raw) as UserSession
-  } catch {
-    return { username: 'usuario', fullname: 'Usuario MGA GADSO' }
-  }
+  return readSessionUser<UserSession>() ?? { username: 'usuario', fullname: 'Usuario MGA GADSO' }
 })
 
 const sigemoMenu = computed(() =>
@@ -163,7 +154,7 @@ const userRoleLabel = computed(() => {
 
 function onSelectItem(item: { to?: string; action?: 'logout' }): void {
   if (item.action === 'logout') {
-    sessionStorage.removeItem('sigemo-user')
+    clearSession()
     emit('close')
     void router.push('/')
     return

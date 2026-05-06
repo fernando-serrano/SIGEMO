@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
 from pymongo.collection import Collection
 
+from app.dependencies import require_auth
 from app.db import (
     get_permissions_collection_dep,
     get_role_permissions_collection_dep,
@@ -18,13 +18,10 @@ from app.schemas.users import (
     AccessCatalogResponse,
     MutationResponse,
     PermissionUpsertRequest,
-    PermissionSummary,
-    RoleUpsertRequest,
     RolePermissionsRequest,
-    RoleSummary,
+    RoleUpsertRequest,
     UserAccessRequest,
     UserStatusRequest,
-    UserSummary,
     UserUpsertRequest,
 )
 from app.utils.access import (
@@ -32,16 +29,12 @@ from app.utils.access import (
     ensure_distinct_ids,
     fetch_permission_documents_by_ids,
     fetch_role_documents_by_ids,
-    get_effective_permission_ids,
-    get_role_permission_ids,
-    get_user_permission_ids,
-    get_user_role_ids,
     parse_object_id,
 )
 from app.utils.security import hash_password
 from app.utils.serializers import serialize_permission, serialize_role, serialize_user
 
-router = APIRouter(prefix="/api", tags=["users"])
+router = APIRouter(prefix="/api", tags=["users"], dependencies=[Depends(require_auth)])
 
 
 def sync_relation_records(
